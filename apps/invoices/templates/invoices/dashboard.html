@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invoice Parser &mdash; Dashboard</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        :root {
+            --bg:      #f1f5f9;
+            --surface: #ffffff;
+            --border:  #e2e8f0;
+            --text:    #0f172a;
+            --muted:   #64748b;
+            --blue:    #2563eb;
+            --green:   #16a34a;
+            --amber:   #d97706;
+            --red:     #dc2626;
+            --radius:  14px;
+        }
+
+        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+
+        /* ── Nav ── */
+        nav {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            height: 56px;
+        }
+        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
+        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+        nav a:hover, nav a.active { color: var(--blue); }
+
+        /* ── Layout ── */
+        main { max-width: 1140px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+        h2 { font-size: 1.1rem; margin: 0 0 1rem; }
+        p  { margin: 0.4rem 0; color: var(--muted); font-size: 0.92rem; }
+
+        /* ── Stat cards ── */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1rem;
+            margin: 1.25rem 0;
+        }
+        .stat {
+            border-radius: 12px;
+            padding: 1rem 1.1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        .stat-blue   { background: #eff6ff; border: 1px solid #bfdbfe; }
+        .stat-amber  { background: #fffbeb; border: 1px solid #fde68a; }
+        .stat-green  { background: #f0fdf4; border: 1px solid #bbf7d0; }
+        .stat-gray   { background: #f8fafc; border: 1px solid #e2e8f0; }
+        .stat-label  { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .stat-value  { font-size: 2rem; font-weight: 700; line-height: 1; }
+        .stat-blue  .stat-value { color: var(--blue); }
+        .stat-amber .stat-value { color: var(--amber); }
+        .stat-green .stat-value { color: var(--green); }
+        .stat-gray  .stat-value { color: #475569; }
+
+        /* ── Progress bar ── */
+        .progress-wrap { margin: 0.5rem 0 0; }
+        .progress-track {
+            background: #e2e8f0;
+            border-radius: 99px;
+            height: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            background: var(--green);
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.4s ease;
+        }
+        .progress-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem; }
+
+        /* ── Two-column grid ── */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+        @media (max-width: 680px) { .grid-2 { grid-template-columns: 1fr; } }
+
+        /* ── Form ── */
+        .upload-label {
+            display: block;
+            border: 2px dashed var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 0.9rem;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .upload-label:hover { border-color: var(--blue); background: #eff6ff; }
+        input[type="file"] { display: none; }
+        .upload-filename { font-size: 0.85rem; color: var(--blue); margin-top: 0.4rem; min-height: 1.2em; }
+
+        .btn {
+            display: inline-block;
+            padding: 0.6rem 1.3rem;
+            border-radius: 8px;
+            font: inherit;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border: none;
+            font-weight: 600;
+        }
+        .btn-primary { background: var(--blue); color: #fff; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-outline { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
+        .btn-outline:hover { background: #eff6ff; }
+
+        .error-list { color: var(--red); font-size: 0.88rem; padding-left: 1.2rem; margin: 0.5rem 0; }
+
+        /* ── Table ── */
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { text-align: left; padding: 0.55rem 0.5rem; font-size: 0.78rem; text-transform: uppercase;
+             letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--border); }
+        td { padding: 0.7rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-green  { background: #dcfce7; color: #15803d; }
+        .badge-amber  { background: #fef3c7; color: #92400e; }
+        .badge-gray   { background: #f1f5f9; color: #475569; }
+
+        a { color: var(--blue); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .empty-state {
+            text-align: center;
+            padding: 2.5rem 1rem;
+            color: var(--muted);
+        }
+        .empty-state .icon { font-size: 2.5rem; display: block; margin-bottom: 0.5rem; }
+        .empty-state strong { display: block; color: var(--text); margin-bottom: 0.4rem; font-size: 1rem; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
+    <a href="{% url 'invoices:dashboard' %}" class="active">Dashboard</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
+    <a href="{% url 'invoices:reports' %}">Reports</a>
+    {% if debug %}
+    <a href="{% url 'invoices:clear_data' %}" style="margin-left: auto; color: #dc2626; font-size: 0.85rem;">Clear Data</a>
+    {% endif %}
+</nav>
+
+<main>
+
+    <!-- Stats -->
+    <section class="card">
+        <h1>Dashboard</h1>
+        <p>Upload Amazon invoices, review GL code suggestions, and track spend across properties.</p>
+
+        <div class="stats">
+            <div class="stat stat-blue">
+                <span class="stat-label">Invoices</span>
+                <span class="stat-value">{{ stats.invoice_count }}</span>
+            </div>
+            <div class="stat stat-gray">
+                <span class="stat-label">Line Items</span>
+                <span class="stat-value">{{ stats.line_item_count }}</span>
+            </div>
+            <div class="stat stat-amber">
+                <span class="stat-label">Needs Review</span>
+                <span class="stat-value">{{ stats.pending_review_count }}</span>
+            </div>
+            <div class="stat stat-green">
+                <span class="stat-label">Reviewed</span>
+                <span class="stat-value">{{ stats.reviewed_item_count }}</span>
+            </div>
+        </div>
+
+        {% if stats.line_item_count %}
+        <div class="progress-wrap">
+            <div class="progress-track">
+                <div class="progress-fill" style="width: {{ review_pct }}%"></div>
+            </div>
+            <p class="progress-label">{{ review_pct }}% of line items reviewed &mdash; {{ stats.reviewed_item_count }} of {{ stats.line_item_count }}</p>
+        </div>
+        {% endif %}
+    </section>
+
+    <!-- Upload + Bulk -->
+    <div class="grid-2">
+
+        <!-- Single upload -->
+        <article class="card">
+            <h2>Upload a Single Invoice</h2>
+            <p>Choose one PDF and we'll parse it immediately, then take you straight to the review screen.</p>
+
+            <form method="post" enctype="multipart/form-data" style="margin-top: 1rem;">
+                {% csrf_token %}
+
+                {% if single_form.errors %}
+                <ul class="error-list">
+                    {% for error in single_form.invoice_pdf.errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+
+                <label class="upload-label" for="id_invoice_pdf">
+                    <span style="font-size: 1.6rem; display: block; margin-bottom: 0.4rem;">📄</span>
+                    Click to choose a PDF
+                    <span class="upload-filename" id="single-filename"></span>
+                </label>
+                <input type="file" name="invoice_pdf" id="id_invoice_pdf" accept=".pdf"
+                       onchange="document.getElementById('single-filename').textContent = this.files[0]?.name || ''">
+
+                <button class="btn btn-primary" style="margin-top: 1rem; width: 100%;" type="submit">
+                    Upload &amp; Review
+                </button>
+            </form>
+        </article>
+
+        <!-- Bulk -->
+        <article class="card">
+            <h2>Bulk Upload</h2>
+            <p>Have a folder of invoices? Upload up to {{ max_files }} PDFs at once. Results are saved to:</p>
+            <code style="font-size: 0.82rem; color: var(--muted);">{{ output_path }}</code>
+            <p style="margin-top: 0.75rem;">Reference files loaded: {{ reference_files|length }}</p>
+            <a class="btn btn-outline" href="{% url 'invoices:bulk_upload' %}" style="margin-top: 1rem; display: inline-block;">
+                Open Bulk Upload &rarr;
+            </a>
+        </article>
+
+    </div>
+
+    <!-- Recent invoices -->
+    <section class="card">
+        <h2>Recent Invoices</h2>
+
+        {% if recent_invoices %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Invoice #</th>
+                    <th>Property</th>
+                    <th>GL Code</th>
+                    <th>Total</th>
+                    <th>Review Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in recent_invoices %}
+                <tr>
+                    <td>
+                        <a href="{% url 'invoices:invoice_detail' invoice.id %}">{{ invoice.invoice_number }}</a><br>
+                        <span style="font-size: 0.8rem; color: var(--muted);">{{ invoice.invoice_date|default:"Date unknown" }}</span>
+                    </td>
+                    <td>
+                        {{ invoice.property_code_normalized|default:"Unknown" }}
+                        {% if invoice.property_reference %}
+                            <span class="badge badge-green">validated</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ invoice.invoice_gl_code|default:"&mdash;" }}</td>
+                    <td>${{ invoice.grand_total|default:"&mdash;" }}</td>
+                    <td>
+                        {% if invoice.pending_review_count == 0 %}
+                            <span class="badge badge-green">All reviewed</span>
+                        {% else %}
+                            <span class="badge badge-amber">{{ invoice.pending_review_count }} remaining</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <span class="icon">📭</span>
+            <strong>No invoices yet</strong>
+            Upload your first invoice above to get started.
+        </div>
+        {% endif %}
+    </section>
+
+</main>
+
+</body>
+</html>

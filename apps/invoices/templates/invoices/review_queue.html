@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invoice Parser &mdash; Review Queue</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
+            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
+            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
+        }
+        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+
+        nav {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
+        }
+        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
+        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+        nav a:hover, nav a.active { color: var(--blue); }
+
+        main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
+
+        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+        p  { margin: 0.4rem 0; color: var(--muted); font-size: 0.92rem; }
+
+        /* ── Toolbar ── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .toolbar-left { display: flex; align-items: center; gap: 0.75rem; }
+        .toolbar-right { display: flex; align-items: center; gap: 0.5rem; }
+
+        .badge-pending {
+            background: #fef3c7; color: #92400e;
+            border-radius: 99px; padding: 0.2rem 0.7rem;
+            font-size: 0.8rem; font-weight: 600;
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-block; padding: 0.55rem 1.1rem; border-radius: 8px;
+            font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; border: none;
+            text-decoration: none;
+        }
+        .btn-primary  { background: var(--blue); color: #fff; }
+        .btn-primary:hover  { background: #1d4ed8; }
+        .btn-green    { background: var(--green); color: #fff; }
+        .btn-green:hover    { background: #15803d; }
+        .btn-outline  { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
+        .btn-outline:hover  { background: #eff6ff; }
+        .btn-sm { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+
+        /* ── Table ── */
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        th {
+            text-align: left; padding: 0.55rem 0.6rem;
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--muted); border-bottom: 2px solid var(--border);
+            white-space: nowrap;
+        }
+        td { padding: 0.65rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #f8fafc; }
+
+        .desc { max-width: 320px; }
+        .desc-text { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+        .invoice-link { font-size: 0.8rem; color: var(--muted); }
+        .invoice-link a { color: var(--blue); }
+
+        .confidence-bar {
+            display: flex; align-items: center; gap: 0.4rem;
+            font-size: 0.78rem; color: var(--muted);
+        }
+        .bar-track { flex: 1; max-width: 60px; background: #e2e8f0; border-radius: 99px; height: 5px; overflow: hidden; }
+        .bar-fill  { height: 100%; border-radius: 99px; background: var(--green); }
+
+        .suggested-label {
+            font-size: 0.82rem; color: var(--text); font-weight: 500; white-space: nowrap;
+        }
+
+        select {
+            font: inherit; font-size: 0.85rem; padding: 0.35rem 0.5rem;
+            border: 1px solid var(--border); border-radius: 6px;
+            background: var(--surface); color: var(--text);
+            width: 100%; min-width: 180px; max-width: 240px;
+        }
+        select:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: transparent; }
+
+        /* ── Pagination ── */
+        .pagination {
+            display: flex; align-items: center; justify-content: center;
+            gap: 0.4rem; margin-top: 1.5rem; flex-wrap: wrap;
+        }
+        .page-btn {
+            padding: 0.4rem 0.75rem; border-radius: 6px; font: inherit;
+            font-size: 0.85rem; cursor: pointer; border: 1px solid var(--border);
+            background: var(--surface); color: var(--text); text-decoration: none;
+        }
+        .page-btn:hover { border-color: var(--blue); color: var(--blue); }
+        .page-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+        .page-btn:disabled { opacity: 0.4; cursor: default; }
+
+        .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
+        .empty-state .icon { font-size: 3rem; display: block; margin-bottom: 0.75rem; }
+        .empty-state strong { display: block; color: var(--text); font-size: 1.1rem; margin-bottom: 0.5rem; }
+
+        a { color: var(--blue); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
+    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
+    <a href="{% url 'invoices:review_queue' %}" class="active">Review Queue</a>
+    <a href="{% url 'invoices:reports' %}">Reports</a>
+</nav>
+
+<main>
+
+    <div class="card">
+        <h1>Review Queue</h1>
+        <p>Approve or override the suggested GL code for each line item. Items reviewed here update the model's suggestions for future invoices.</p>
+    </div>
+
+    {% if page_obj.object_list %}
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="item_ids" value="{{ item_ids_csv }}">
+        <input type="hidden" name="page" value="{{ page_obj.number }}">
+
+        <div class="card" style="padding: 1rem 1.5rem;">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <span class="badge-pending">{{ total_pending }} item{{ total_pending|pluralize }} remaining</span>
+                    <span style="font-size: 0.85rem; color: var(--muted);">
+                        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                        &mdash; showing {{ page_obj.start_index }}–{{ page_obj.end_index }}
+                    </span>
+                </div>
+                <div class="toolbar-right">
+                    <button type="submit" name="action" value="accept_all" class="btn btn-green btn-sm">
+                        Accept all suggestions on this page
+                    </button>
+                    <button type="submit" name="action" value="save" class="btn btn-primary btn-sm">
+                        Save this page
+                    </button>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Invoice</th>
+                        <th>Amount</th>
+                        <th>Suggestion</th>
+                        <th>Approve as</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in page_obj %}
+                    <tr>
+                        <td class="desc">
+                            <span class="desc-text" title="{{ item.description }}">{{ item.description }}</span>
+                        </td>
+                        <td>
+                            <span class="invoice-link">
+                                <a href="{% url 'invoices:invoice_detail' item.invoice_id %}">{{ item.invoice.invoice_number }}</a>
+                            </span>
+                        </td>
+                        <td style="white-space: nowrap;">
+                            {% if item.line_total %}${{ item.line_total }}{% else %}&mdash;{% endif %}
+                        </td>
+                        <td>
+                            {% if item.suggested_gl %}
+                            <span class="suggested-label">{{ item.suggested_gl.code }}</span>
+                            <span style="font-size: 0.78rem; color: var(--muted); display: block;">{{ item.suggested_gl.description }}</span>
+                            {% if item.suggested_confidence %}
+                            <div class="confidence-bar" style="margin-top: 0.25rem;">
+                                <div class="bar-track">
+                                    <div class="bar-fill" style="width: {% widthratio item.suggested_confidence 1 100 %}%"></div>
+                                </div>
+                                <span>{{ item.suggested_confidence }}</span>
+                            </div>
+                            {% endif %}
+                            {% else %}
+                            <span style="color: var(--muted); font-size: 0.82rem;">No suggestion</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <select name="item_{{ item.id }}_gl"
+                                    id="sel_{{ item.id }}"
+                                    data-suggested="{{ item.suggested_gl.code|default:'' }}">
+                                <option value="">— skip —</option>
+                                {% for gl in gl_accounts %}
+                                <option value="{{ gl.code }}"
+                                    {% if item.suggested_gl and item.suggested_gl.code == gl.code %}selected{% endif %}>
+                                    {{ gl.code }} &ndash; {{ gl.description }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-outline btn-sm"
+                                    onclick="acceptSuggestion('{{ item.id }}')">
+                                Accept
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                <button type="submit" name="action" value="accept_all" class="btn btn-green">
+                    Accept all suggestions on this page
+                </button>
+                <button type="submit" name="action" value="save" class="btn btn-primary">
+                    Save this page
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- Pagination -->
+    <div class="pagination">
+        {% if page_obj.has_previous %}
+        <a class="page-btn" href="?page=1">&laquo; First</a>
+        <a class="page-btn" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        {% endif %}
+
+        {% for num in page_obj.paginator.page_range %}
+            {% if num == page_obj.number %}
+            <span class="page-btn active">{{ num }}</span>
+            {% elif num >= page_obj.number|add:"-3" and num <= page_obj.number|add:"3" %}
+            <a class="page-btn" href="?page={{ num }}">{{ num }}</a>
+            {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+        <a class="page-btn" href="?page={{ page_obj.next_page_number }}">Next</a>
+        <a class="page-btn" href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+        {% endif %}
+    </div>
+
+    {% else %}
+
+    <div class="card">
+        <div class="empty-state">
+            <span class="icon">✅</span>
+            <strong>All caught up!</strong>
+            Every line item has been reviewed. Head to Reports to see spend breakdowns.
+            <br><br>
+            <a class="btn btn-outline" href="{% url 'invoices:reports' %}">View Reports</a>
+        </div>
+    </div>
+
+    {% endif %}
+
+</main>
+
+<script>
+    function acceptSuggestion(itemId) {
+        const sel = document.getElementById("sel_" + itemId);
+        const suggested = sel.dataset.suggested;
+        if (suggested) sel.value = suggested;
+    }
+</script>
+
+</body>
+</html>

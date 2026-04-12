@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invoice Parser &mdash; Reports</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
+            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
+            --green: #16a34a; --amber: #d97706; --radius: 14px;
+        }
+        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+
+        nav {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
+        }
+        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
+        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+        nav a:hover, nav a.active { color: var(--blue); }
+
+        main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
+
+        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+        h2 { font-size: 1.05rem; margin: 0 0 1rem; }
+        p  { margin: 0.35rem 0; color: var(--muted); font-size: 0.92rem; }
+
+        /* Summary stats */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.9rem; margin: 1rem 0; }
+        .stat { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1rem; }
+        .stat-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.2rem; }
+        .stat-value { font-size: 1.6rem; font-weight: 700; color: var(--text); }
+
+        /* Bar chart rows */
+        .chart-row { display: grid; grid-template-columns: 200px 1fr 90px; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+        .chart-row:last-child { border-bottom: none; }
+        .chart-row-label { color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chart-bar-track { background: #e2e8f0; border-radius: 99px; height: 12px; overflow: hidden; }
+        .chart-bar-fill  { height: 100%; border-radius: 99px; background: var(--blue); }
+        .chart-bar-fill.green { background: var(--green); }
+        .chart-row-amount { text-align: right; font-weight: 600; color: var(--text); white-space: nowrap; }
+
+        .chart-header { display: grid; grid-template-columns: 200px 1fr 90px; gap: 0.75rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-bottom: 0.4rem; border-bottom: 2px solid var(--border); margin-bottom: 0.25rem; }
+
+        .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--muted); }
+        .empty-state .icon { font-size: 2rem; display: block; margin-bottom: 0.5rem; }
+
+        a { color: var(--blue); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
+    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
+    <a href="{% url 'invoices:reports' %}" class="active">Reports</a>
+</nav>
+
+<main>
+
+    <!-- Header + stats -->
+    <section class="card">
+        <h1>Spend Reports</h1>
+        <p>Totals use approved GL codes where available, falling back to the system suggestion. Amounts shown pre-tax.</p>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-label">Invoices</div>
+                <div class="stat-value">{{ stats.invoice_count }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Line Items</div>
+                <div class="stat-value">{{ stats.line_item_count }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Pending Review</div>
+                <div class="stat-value" style="color: var(--amber);">{{ stats.pending_review_count }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Reviewed</div>
+                <div class="stat-value" style="color: var(--green);">{{ stats.reviewed_item_count }}</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Spend by GL -->
+    <section class="card">
+        <h2>Spend by GL Code</h2>
+        {% if spend_by_gl %}
+            <div class="chart-header">
+                <span>GL Code</span>
+                <span>Amount</span>
+                <span>Total</span>
+            </div>
+            {% for row in spend_by_gl %}
+            <div class="chart-row">
+                <div class="chart-row-label" title="{{ row.gl_description }}">
+                    {{ row.gl_code }} &mdash; {{ row.gl_description }}
+                </div>
+                <div class="chart-bar-track">
+                    <div class="chart-bar-fill" style="width: {{ row.bar_pct }}%"></div>
+                </div>
+                <div class="chart-row-amount">${{ row.total_amount|floatformat:2 }}</div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <span class="icon">📊</span>
+                No spend data yet. Upload and review some invoices to see this chart.
+            </div>
+        {% endif %}
+    </section>
+
+    <!-- Spend by property -->
+    <section class="card">
+        <h2>Spend by Property</h2>
+        {% if items_by_property %}
+            <div class="chart-header">
+                <span>Property</span>
+                <span>Amount</span>
+                <span>Total</span>
+            </div>
+            {% for row in items_by_property %}
+            <div class="chart-row">
+                <div class="chart-row-label">{{ row.property_code }}</div>
+                <div class="chart-bar-track">
+                    <div class="chart-bar-fill green" style="width: {{ row.bar_pct }}%"></div>
+                </div>
+                <div class="chart-row-amount">${{ row.total_amount|floatformat:2 }}</div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <span class="icon">🏘️</span>
+                No property data yet.
+            </div>
+        {% endif %}
+    </section>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invoice Parser &mdash; Bulk Upload</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
+            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
+            --green: #16a34a; --red: #dc2626; --radius: 14px;
+        }
+        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+
+        nav {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
+        }
+        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
+        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+        nav a:hover, nav a.active { color: var(--blue); }
+
+        main { max-width: 680px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.75rem; margin-bottom: 1.25rem; }
+        h1 { font-size: 1.4rem; margin: 0 0 0.5rem; }
+        p  { margin: 0.4rem 0; color: var(--muted); font-size: 0.92rem; line-height: 1.6; }
+
+        .upload-zone {
+            background: #f8fafc;
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 2.25rem 1.5rem;
+            cursor: pointer;
+            color: var(--muted);
+            transition: border-color 0.2s, background 0.2s;
+            margin: 1.25rem 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .upload-zone:hover { border-color: var(--blue); background: #eff6ff; }
+        .upload-zone.has-files { border-color: var(--green); background: #f0fdf4; }
+        .upload-zone .icon { font-size: 2.25rem; line-height: 1; }
+        .upload-zone .upload-title { font-weight: 600; color: var(--text); font-size: 0.95rem; }
+        .upload-zone .upload-hint { font-size: 0.83rem; }
+        input[type="file"] { display: none; }
+        .file-list { font-size: 0.85rem; color: #15803d; font-weight: 600; }
+
+        .btn { display: inline-block; padding: 0.65rem 1.5rem; border-radius: 8px; font: inherit;
+               font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; }
+        .btn-primary { background: var(--blue); color: #fff; width: 100%; margin-top: 0.5rem; font-size: 1rem; padding: 0.8rem; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+
+        .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; font-size: 0.88rem; color: #1e40af; }
+        .info-box strong { display: block; margin-bottom: 0.25rem; }
+
+        .error-list { color: var(--red); font-size: 0.88rem; padding-left: 1.2rem; margin: 0.5rem 0; }
+
+        a { color: var(--blue); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* ── Loading overlay ── */
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(2px);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        .loading-overlay.visible { display: flex; }
+
+        .loading-card {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 2.25rem 2.5rem;
+            width: min(460px, 92vw);
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+        .loading-card .spinner {
+            font-size: 2.5rem;
+            display: block;
+            margin-bottom: 1rem;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-card h2 { font-size: 1.15rem; margin: 0 0 0.25rem; }
+        .loading-card .sub { font-size: 0.88rem; color: var(--muted); margin: 0 0 1.25rem; }
+
+        /* Determinate progress bar */
+        .progress-track {
+            background: #e2e8f0;
+            border-radius: 99px;
+            height: 12px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 99px;
+            background: var(--blue);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .progress-fill.indeterminate {
+            width: 40%;
+            animation: slide 1.6s ease-in-out infinite;
+        }
+        @keyframes slide {
+            0%   { transform: translateX(-100%); }
+            100% { transform: translateX(350%); }
+        }
+        .progress-label {
+            font-size: 0.82rem;
+            color: var(--muted);
+            margin-bottom: 1rem;
+            min-height: 1.2em;
+        }
+        .current-file {
+            font-size: 0.8rem;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 1rem;
+            min-height: 1.1em;
+        }
+
+        .error-tally {
+            font-size: 0.82rem;
+            color: var(--red);
+            min-height: 1em;
+            margin-bottom: 0.5rem;
+        }
+        .loading-warn { font-size: 0.78rem; color: var(--muted); margin-top: 0.75rem; }
+
+        /* Done state */
+        .done-icon { font-size: 2.5rem; display: block; margin-bottom: 0.75rem; }
+        .done-stats { display: flex; justify-content: center; gap: 1.5rem; margin: 1rem 0; }
+        .done-stat { text-align: center; }
+        .done-stat .val { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+        .done-stat .lbl { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .done-stat.ok .val { color: var(--green); }
+        .done-stat.err .val { color: var(--red); }
+        .done-actions { display: flex; justify-content: center; gap: 0.75rem; margin-top: 1.25rem; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
+    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
+    <a href="{% url 'invoices:bulk_upload' %}" class="active">Bulk Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
+    <a href="{% url 'invoices:reports' %}">Reports</a>
+</nav>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loading-overlay">
+    <div class="loading-card" id="loading-card">
+        <span class="spinner" id="ld-spinner">⚙️</span>
+        <h2 id="ld-title">Processing <span id="ld-file-count"></span></h2>
+        <p class="sub" id="ld-sub">This may take a moment &mdash; please don't close this tab.</p>
+
+        <div class="progress-track" id="ld-track">
+            <div class="progress-fill indeterminate" id="ld-fill"></div>
+        </div>
+        <div class="progress-label" id="ld-progress-label"></div>
+        <div class="current-file" id="ld-current-file"></div>
+        <div class="error-tally" id="ld-errors"></div>
+
+        <p class="loading-warn" id="ld-warn">A batch of 50 files typically finishes in under a minute.</p>
+    </div>
+</div>
+
+<main>
+    <div class="card">
+        <h1>Bulk Invoice Upload</h1>
+        <p>
+            Select multiple Amazon invoice PDFs at once. We'll parse them all, suggest
+            GL codes for each line item, save everything to the database, and export
+            a JSON snapshot you can share or import elsewhere.
+        </p>
+
+        <div class="info-box">
+            <strong>What happens after you click upload?</strong>
+            A progress screen will appear while we process your files. Results are shown
+            automatically when everything is done.
+        </div>
+
+        {% if form.errors %}
+        <ul class="error-list">
+            {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+            {% for field in form %}{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}{% endfor %}
+        </ul>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" id="upload-form">
+            {% csrf_token %}
+
+            <label class="upload-zone" id="upload-zone" for="id_invoice_pdfs">
+                <span class="icon">📂</span>
+                <span class="upload-title">Click to choose your PDF files</span>
+                <span class="upload-hint">You can select up to {{ max_files }} files at once</span>
+                <span class="file-list" id="file-list-display"></span>
+            </label>
+            <input type="file" name="invoice_pdfs" id="id_invoice_pdfs" accept=".pdf" multiple
+                   onchange="updateFileList(this)">
+
+            <button class="btn btn-primary" type="submit" id="submit-btn">Parse All Invoices</button>
+        </form>
+
+        <p style="margin-top: 1.25rem; font-size: 0.85rem;">
+            <a href="{% url 'invoices:dashboard' %}">&larr; Back to dashboard</a>
+        </p>
+    </div>
+</main>
+
+<script>
+    let fileCount = 0;
+
+    function updateFileList(input) {
+        const display = document.getElementById("file-list-display");
+        const zone    = document.getElementById("upload-zone");
+        fileCount = input.files.length;
+        if (fileCount === 0) {
+            display.textContent = "";
+            zone.classList.remove("has-files");
+        } else if (fileCount === 1) {
+            display.textContent = input.files[0].name;
+            zone.classList.add("has-files");
+        } else {
+            display.textContent = `${fileCount} files selected`;
+            zone.classList.add("has-files");
+        }
+    }
+
+    document.getElementById("upload-form").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        if (fileCount === 0) return;
+
+        // Show overlay
+        const overlay = document.getElementById("loading-overlay");
+        overlay.classList.add("visible");
+        document.getElementById("submit-btn").disabled = true;
+
+        const label = fileCount === 1 ? "1 invoice" : `${fileCount} invoices`;
+        document.getElementById("ld-file-count").textContent = label;
+
+        const fill        = document.getElementById("ld-fill");
+        const progLabel   = document.getElementById("ld-progress-label");
+        const currentFile = document.getElementById("ld-current-file");
+        const errorTally  = document.getElementById("ld-errors");
+        let errorCount = 0;
+
+        // POST the form via fetch and read the SSE stream
+        const formData = new FormData(this);
+        let response;
+        try {
+            response = await fetch(this.action || window.location.href, {
+                method: "POST",
+                body: formData,
+            });
+        } catch (err) {
+            showFatal("Network error: " + err.message);
+            return;
+        }
+
+        if (!response.ok) {
+            showFatal("Server error " + response.status);
+            return;
+        }
+
+        const reader  = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            // SSE lines look like "data: {...}\n\n"
+            const parts = buffer.split("\n\n");
+            buffer = parts.pop(); // keep incomplete trailing chunk
+
+            for (const part of parts) {
+                const line = part.trim();
+                if (!line.startsWith("data:")) continue;
+                let evt;
+                try { evt = JSON.parse(line.slice(5).trim()); }
+                catch { continue; }
+                handleEvent(evt);
+            }
+        }
+
+        function handleEvent(evt) {
+            if (evt.type === "progress") {
+                const pct = Math.round((evt.current / evt.total) * 100);
+                fill.classList.remove("indeterminate");
+                fill.style.width = pct + "%";
+                progLabel.textContent = `${evt.current} of ${evt.total} files processed (${pct}%)`;
+                currentFile.textContent = evt.filename ? `Current: ${evt.filename}` : "";
+                if (evt.status === "error") {
+                    errorCount++;
+                    errorTally.textContent = `${errorCount} file${errorCount !== 1 ? "s" : ""} could not be parsed`;
+                }
+            } else if (evt.type === "saving") {
+                fill.style.width = "98%";
+                progLabel.textContent = "Saving to database…";
+                currentFile.textContent = "";
+            } else if (evt.type === "done") {
+                showDone(evt);
+            } else if (evt.type === "fatal") {
+                showFatal(evt.error || "An unexpected error occurred.");
+            }
+        }
+
+        function showDone(evt) {
+            fill.style.width = "100%";
+            fill.style.background = "var(--green)";
+
+            const card = document.getElementById("loading-card");
+            card.innerHTML = `
+                <span class="done-icon">✅</span>
+                <h2>Upload Complete</h2>
+                <div class="done-stats">
+                    <div class="done-stat ok">
+                        <div class="val">${evt.success}</div>
+                        <div class="lbl">Parsed</div>
+                    </div>
+                    <div class="done-stat err">
+                        <div class="val">${evt.errors}</div>
+                        <div class="lbl">Errors</div>
+                    </div>
+                </div>
+                ${evt.errors > 0 ? `<p style="font-size:0.82rem;color:var(--red);margin:0 0 0.5rem;">${evt.error_list.map(e => e.filename).join(", ")}</p>` : ""}
+                <p style="font-size:0.8rem;color:var(--muted);margin:0 0 1rem;">JSON saved to: ${evt.output_path}</p>
+                <div class="done-actions">
+                    <a class="btn btn-primary" href="{% url 'invoices:review_queue' %}">Go to Review Queue</a>
+                    <a class="btn btn-outline" href="{% url 'invoices:dashboard' %}">Dashboard</a>
+                </div>
+            `;
+        }
+
+        function showFatal(msg) {
+            document.getElementById("ld-spinner").textContent = "❌";
+            document.getElementById("ld-title").textContent = "Something went wrong";
+            document.getElementById("ld-sub").textContent = msg;
+            fill.style.background = "var(--red)";
+            document.getElementById("ld-warn").textContent = "You can close this tab and try again.";
+        }
+    });
+</script>
+
+</body>
+</html>

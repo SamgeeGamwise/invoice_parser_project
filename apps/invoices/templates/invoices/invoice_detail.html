@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invoice Parser &mdash; {{ invoice.invoice_number }}</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
+            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
+            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
+        }
+        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+
+        nav {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
+        }
+        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
+        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+        nav a:hover { color: var(--blue); }
+
+        main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
+
+        h1 { font-size: 1.3rem; margin: 0 0 0.2rem; }
+        h2 { font-size: 1.05rem; margin: 0 0 1rem; }
+        p  { margin: 0.35rem 0; color: var(--muted); font-size: 0.9rem; }
+
+        /* Meta grid */
+        .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+        .meta-item { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 0.9rem; }
+        .meta-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.2rem; }
+        .meta-value { font-size: 0.95rem; font-weight: 600; color: var(--text); }
+
+        /* Line items table */
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        th { text-align: left; padding: 0.5rem 0.4rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--border); white-space: nowrap; }
+        td { padding: 0.8rem 0.4rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+        tr:last-child td { border-bottom: none; }
+        tr.reviewed-row { background: #f0fdf4; }
+
+        /* GL selector */
+        select {
+            width: 100%;
+            font: inherit;
+            font-size: 0.85rem;
+            padding: 0.4rem 0.5rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: #fff;
+        }
+        select:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue); }
+        textarea {
+            width: 100%;
+            font: inherit;
+            font-size: 0.82rem;
+            padding: 0.4rem 0.5rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            resize: vertical;
+            min-height: 3.5rem;
+            margin-top: 0.4rem;
+        }
+        textarea:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+        /* Confidence bar */
+        .confidence-bar { background: #e2e8f0; border-radius: 99px; height: 6px; margin: 0.3rem 0; overflow: hidden; }
+        .confidence-fill { height: 100%; border-radius: 99px; background: var(--green); }
+
+        .badge { display: inline-block; padding: 0.12rem 0.45rem; border-radius: 99px; font-size: 0.72rem; font-weight: 600; }
+        .badge-green  { background: #dcfce7; color: #15803d; }
+        .badge-amber  { background: #fef3c7; color: #92400e; }
+        .badge-blue   { background: #dbeafe; color: #1e40af; }
+        .badge-gray   { background: #f1f5f9; color: #475569; }
+
+        .btn { display: inline-block; padding: 0.65rem 1.5rem; border-radius: 8px; font: inherit; font-size: 0.95rem; font-weight: 600; cursor: pointer; border: none; }
+        .btn-primary { background: var(--blue); color: #fff; }
+        .btn-primary:hover { background: #1d4ed8; }
+
+        a { color: var(--blue); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        summary { cursor: pointer; font-size: 0.8rem; color: var(--muted); }
+        details ul { margin: 0.4rem 0 0; padding-left: 1rem; font-size: 0.8rem; color: var(--muted); }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
+    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
+    <a href="{% url 'invoices:reports' %}">Reports</a>
+</nav>
+
+<main>
+
+    <!-- Invoice header -->
+    <section class="card">
+        <p style="margin-bottom: 0.75rem;"><a href="{% url 'invoices:dashboard' %}">&larr; Back to dashboard</a></p>
+        <h1>Invoice {{ invoice.invoice_number }}</h1>
+        <p>Review the GL code suggestion for each line item below. Approve or override as needed, then save.</p>
+
+        <div class="meta">
+            <div class="meta-item">
+                <div class="meta-label">Invoice Date</div>
+                <div class="meta-value">{{ invoice.invoice_date|default:"Unknown" }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Purchaser</div>
+                <div class="meta-value">{{ invoice.purchaser|default:"Unknown" }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Property</div>
+                <div class="meta-value">
+                    {{ invoice.property_code_normalized|default:"Unknown" }}
+                    {% if invoice.property_reference %}<span class="badge badge-green" style="vertical-align: middle;">validated</span>{% endif %}
+                </div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Invoice GL Hint</div>
+                <div class="meta-value">{{ invoice.invoice_gl_code|default:"None" }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Subtotal</div>
+                <div class="meta-value">${{ invoice.subtotal|default:"0.00" }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Tax</div>
+                <div class="meta-value">${{ invoice.tax_total|default:"0.00" }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Grand Total</div>
+                <div class="meta-value" style="color: var(--blue);">${{ invoice.grand_total|default:"0.00" }}</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Line item review -->
+    <section class="card">
+        <h2>Line Items</h2>
+        <form method="post">
+            {% csrf_token %}
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 4%;">#</th>
+                        <th style="width: 28%;">Description</th>
+                        <th style="width: 12%;">Amount</th>
+                        <th style="width: 24%;">GL Suggestion</th>
+                        <th style="width: 32%;">Your Approval</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in invoice.line_items.all %}
+                    <tr {% if item.approved_gl %}class="reviewed-row"{% endif %}>
+
+                        <td>
+                            {{ item.line_number }}<br>
+                            <span class="badge badge-gray">{{ item.item_type }}</span>
+                        </td>
+
+                        <td>
+                            <strong style="font-size: 0.88rem;">{{ item.description }}</strong>
+                            {% if item.vendor %}
+                            <br><span style="font-size: 0.8rem; color: var(--muted);">{{ item.vendor }}</span>
+                            {% endif %}
+                            {% if item.asin %}
+                            <br><span style="font-size: 0.78rem; color: var(--muted);">ASIN: {{ item.asin }}</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            {% if item.quantity %}Qty {{ item.quantity }}<br>{% endif %}
+                            {% if item.unit_price %}${{ item.unit_price }} each<br>{% endif %}
+                            <strong>${{ item.line_total|default:"&mdash;" }}</strong>
+                        </td>
+
+                        <td>
+                            {% if item.suggested_gl %}
+                                <strong style="font-size: 0.85rem;">{{ item.suggested_gl.code }}</strong>
+                                <span style="font-size: 0.82rem; color: var(--muted);">{{ item.suggested_gl.description }}</span>
+                                {% if item.suggested_confidence %}
+                                <div class="confidence-bar" title="{{ item.suggested_confidence }} confidence">
+                                    <div class="confidence-fill" style="width: {% widthratio item.suggested_confidence 1 100 %}%"></div>
+                                </div>
+                                <span style="font-size: 0.75rem; color: var(--muted);">{{ item.suggested_confidence }} confidence</span>
+                                {% endif %}
+                                {% if item.suggestion_candidates %}
+                                <details>
+                                    <summary>Other options</summary>
+                                    <ul>
+                                        {% for c in item.suggestion_candidates %}
+                                        <li>{{ c.gl_code }} &mdash; {{ c.gl_description }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </details>
+                                {% endif %}
+                            {% else %}
+                                <span style="font-size: 0.82rem; color: var(--muted);">No suggestion available</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <label for="item_{{ item.id }}_gl" style="font-size: 0.78rem; color: var(--muted);">
+                                {% if item.approved_gl %}Approved GL{% else %}Select GL to approve{% endif %}
+                            </label>
+                            <select id="item_{{ item.id }}_gl" name="item_{{ item.id }}_gl">
+                                <option value="">-- No approval yet --</option>
+                                {% for gl in gl_accounts %}
+                                <option value="{{ gl.code }}"
+                                    {% if item.approved_gl and item.approved_gl.code == gl.code %}selected
+                                    {% elif not item.approved_gl and item.suggested_gl and item.suggested_gl.code == gl.code %}selected
+                                    {% endif %}>
+                                    {{ gl.code }} &mdash; {{ gl.description }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <textarea id="item_{{ item.id }}_notes" name="item_{{ item.id }}_notes"
+                                      placeholder="Optional notes…">{{ item.approval_notes }}</textarea>
+                        </td>
+
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: var(--muted); padding: 2rem;">
+                            No line items were found in this invoice.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div style="margin-top: 1.25rem; display: flex; align-items: center; gap: 1rem;">
+                <button class="btn btn-primary" type="submit">Save Review Decisions</button>
+                <span style="font-size: 0.85rem; color: var(--muted);">
+                    Green rows are already approved.
+                </span>
+            </div>
+        </form>
+    </section>
+
+    <!-- Raw text -->
+    <details>
+        <summary style="cursor: pointer; font-size: 0.88rem; color: var(--muted); padding: 0.5rem 0;">
+            Show raw extracted text
+        </summary>
+        <div class="card" style="margin-top: 0.5rem;">
+            <pre style="white-space: pre-wrap; font-size: 0.82rem; color: var(--muted); margin: 0;">{{ invoice.raw_text }}</pre>
+        </div>
+    </details>
+
+</main>
+</body>
+</html>

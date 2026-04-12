@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Amazon Invoice Parser</title>
+</head>
+<body>
+    <main>
+        <h1>Amazon Invoice Parser</h1>
+        <p>Upload a PDF to exercise the single-file request flow.</p>
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit">Upload PDF</button>
+        </form>
+        <p><a href="{% url 'invoices:bulk_upload' %}">Switch to bulk PDF upload</a></p>
+        <section>
+            <h2>Project Data</h2>
+            <p>Sample invoices available: {{ sample_invoice_count }}</p>
+            <p>Example sample files:</p>
+            <ul>
+                {% for sample_invoice in sample_invoice_examples %}
+                    <li>{{ sample_invoice }}</li>
+                {% empty %}
+                    <li>No sample invoices found.</li>
+                {% endfor %}
+            </ul>
+            <p>Reference files:</p>
+            <ul>
+                {% for reference_file in reference_files %}
+                    <li>{{ reference_file }}</li>
+                {% empty %}
+                    <li>No reference files found.</li>
+                {% endfor %}
+            </ul>
+        </section>
+        <p><a href="{% url 'invoices:results' %}">View placeholder results</a></p>
+    </main>
+</body>
+</html>
