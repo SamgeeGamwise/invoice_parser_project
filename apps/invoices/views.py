@@ -3,16 +3,17 @@ import queue
 import threading
 from pathlib import Path
 
+from django.contrib import messages
 from django.conf import settings
 from django.core.paginator import Paginator
-from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
+from django.db.models import F, Q
+from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
+from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .forms import BulkInvoiceUploadForm, InvoiceUploadForm
-from .models import GLAccount, Invoice, InvoiceLineItem
-from .schemas import InvoiceLineItem as ParsedLineItem
-from .services.classification import LineItemGLClassifierService
+from .models import GLAccount, Invoice, InvoiceLineItem, PropertyReference
 from .services.data_catalog import ProjectDataCatalogService
 from .services.orchestrator import InvoiceProcessingService
 from .services.output_writer import InvoiceOutputWriterService
@@ -133,45 +134,6 @@ def bulk_upload_view(request: HttpRequest) -> HttpResponse:
     })
 
 
-def _rescore_unreviewed(invoice: Invoice) -> None:
-    """Re-run the classifier for every unreviewed product item on this invoice.
-
-    Called on each GET so that suggestions always reflect the latest approvals
-    from other invoices (the KNN history grows with every human approval).
-    """
-    classifier = LineItemGLClassifierService()
-    invoice_gl_code = invoice.invoice_gl_code or ""
-    to_update: list[InvoiceLineItem] = []
-
-    for item in invoice.line_items.all():
-        if not item.needs_review:
-            continue
-
-        parsed = ParsedLineItem(
-            item_type=item.item_type,
-            description=item.description,
-            vendor=item.vendor,
-            invoice_gl_code_hint=invoice_gl_code,
-        )
-        suggestions = classifier.suggest(parsed, invoice_gl_code)
-        if not suggestions:
-            continue
-
-        top = suggestions[0]
-        new_gl = GLAccount.objects.filter(code=top.gl_code).first()
-        item.suggested_gl = new_gl
-        item.suggested_confidence = top.confidence
-        item.suggestion_reason = " ".join(top.reasons)
-        item.suggestion_candidates = [s.to_dict() for s in suggestions]
-        to_update.append(item)
-
-    if to_update:
-        InvoiceLineItem.objects.bulk_update(
-            to_update,
-            ["suggested_gl", "suggested_confidence", "suggestion_reason", "suggestion_candidates"],
-        )
-
-
 def invoice_detail_view(request: HttpRequest, invoice_id: int) -> HttpResponse:
     """Review and approve GL codes for each line item on an invoice."""
     invoice = get_object_or_404(
@@ -185,22 +147,52 @@ def invoice_detail_view(request: HttpRequest, invoice_id: int) -> HttpResponse:
     gl_accounts = list(GLAccount.objects.filter(in_review_range=True).order_by("code"))
 
     if request.method == "POST":
+        approved_count = 0
+        cleared_count = 0
+
         for item in invoice.line_items.all():
             approved_gl_code = request.POST.get(f"item_{item.id}_gl", "").strip()
             approval_notes = request.POST.get(f"item_{item.id}_notes", "").strip()
             approved_gl = GLAccount.objects.filter(code=approved_gl_code).first() if approved_gl_code else None
+            block_reason = _approval_block_reason(item, approved_gl) if approved_gl else None
+
+            item.approval_notes = approval_notes
+
+            if block_reason:
+                item.approved_gl = None
+                item.reviewed_at = None
+                item.save(update_fields=["approved_gl", "approval_notes", "reviewed_at", "updated_at"])
+                continue
 
             item.approved_gl = approved_gl
-            item.approval_notes = approval_notes
             if approved_gl:
                 item.mark_reviewed()
+                approved_count += 1
             else:
                 item.reviewed_at = None
+                cleared_count += 1
             item.save(update_fields=["approved_gl", "approval_notes", "reviewed_at", "updated_at"])
 
-        return redirect("invoices:invoice_detail", invoice_id=invoice.id)
+        if not invoice.has_valid_property:
+            messages.error(
+                request,
+                (
+                    f"Invoice {invoice.invoice_number} is flagged: approvals require both a GL "
+                    "and a validated property code."
+                ),
+            )
+        elif approved_count:
+            messages.success(
+                request,
+                f"Saved {approved_count} approval{'s' if approved_count != 1 else ''} for invoice {invoice.invoice_number}.",
+            )
+        elif cleared_count:
+            messages.info(
+                request,
+                f"Cleared {cleared_count} approval{'s' if cleared_count != 1 else ''} for invoice {invoice.invoice_number}.",
+            )
 
-    _rescore_unreviewed(invoice)
+        return redirect("invoices:invoice_detail", invoice_id=invoice.id)
 
     return render(request, "invoices/invoice_detail.html", {
         "invoice": invoice,
@@ -239,47 +231,146 @@ def results_view(request: HttpRequest) -> HttpResponse:
 _QUEUE_PAGE_SIZE = 50
 
 
+_SORT_FIELDS = {
+    "description": "description",
+    "invoice":     "invoice__invoice_number",
+    "amount":      "line_total",
+    "gl":          "invoice_gl_code_hint",
+    "confidence":  "suggested_confidence",
+}
+
+
+def _approval_block_reason(item: InvoiceLineItem, gl: GLAccount | None) -> str | None:
+    if gl is None:
+        return "No GL code provided."
+    if not item.has_valid_property:
+        return (
+            f"Invoice {item.invoice.invoice_number} is flagged because its property code "
+            "is missing or not validated."
+        )
+    return None
+
+
+def _item_tier(item: InvoiceLineItem, has_invoice_peers: bool = False) -> str:
+    """Return 'auto', 'confirm', or 'review' based on confidence and invoice GL agreement.
+
+    has_invoice_peers: True when at least one other item on the same invoice
+    has already been approved to that invoice's own GL code. This acts as a
+    strong reinforcement signal — if peers confirm the invoice GL is correct,
+    remaining items on that invoice should be treated with higher confidence.
+    """
+    cfg = settings.ML_CONFIG
+    confidence = float(item.suggested_confidence or 0)
+    agrees = (
+        item.suggested_gl_id is not None
+        and item.invoice_gl_code_hint
+        and item.suggested_gl.code == item.invoice_gl_code_hint
+    )
+    if agrees and confidence >= cfg["TIER_AUTO_APPROVE_AGREE"]:
+        return "auto"
+    # Peer boost: sibling items on this invoice already confirmed to the invoice GL.
+    # Promote to auto if we agree and at least meet the confirm threshold.
+    if agrees and has_invoice_peers and confidence >= cfg["TIER_QUICK_CONFIRM_AGREE"]:
+        return "auto"
+    if agrees and confidence >= cfg["TIER_QUICK_CONFIRM_AGREE"]:
+        return "confirm"
+    if not agrees and confidence >= cfg["TIER_QUICK_CONFIRM_OVERRIDE"]:
+        return "confirm"
+    # Peer boost for borderline cases: agree with invoice GL but below confirm threshold.
+    if agrees and has_invoice_peers:
+        return "confirm"
+    return "review"
+
+
 def review_queue_view(request: HttpRequest) -> HttpResponse:
     """Paginated queue of all unreviewed product line items across every invoice."""
+
+    # Sorting
+    sort_col = request.GET.get("sort", "confidence")
+    if sort_col not in _SORT_FIELDS:
+        sort_col = "confidence"
+
+    sort_dir = "desc" if request.GET.get("dir") == "desc" else "asc"
+    sort_field = _SORT_FIELDS[sort_col]
+    order_expr = sort_field if sort_dir == "asc" else f"-{sort_field}"
+
     pending_qs = (
         InvoiceLineItem.objects
-        .filter(item_type=InvoiceLineItem.ItemType.PRODUCT, approved_gl__isnull=True)
-        .select_related("invoice", "suggested_gl")
-        .order_by("suggested_confidence", "invoice__invoice_date", "line_number")
+        .filter(item_type=InvoiceLineItem.ItemType.PRODUCT)
+        .filter(Q(approved_gl__isnull=True) | Q(invoice__property_reference__isnull=True))
+        .select_related("invoice", "invoice__property_reference", "suggested_gl", "approved_gl")
+        .order_by(order_expr, "id")
     )
     total_pending = pending_qs.count()
 
     if request.method == "POST":
-        action = request.POST.get("action", "save")
         item_ids = [int(x) for x in request.POST.get("item_ids", "").split(",") if x.strip()]
         items_on_page = list(
-            InvoiceLineItem.objects.filter(pk__in=item_ids).select_related("suggested_gl")
+            InvoiceLineItem.objects.filter(pk__in=item_ids).select_related(
+                "invoice", "invoice__property_reference", "suggested_gl", "approved_gl"
+            )
         )
-
         now = timezone.now()
         to_update: list[InvoiceLineItem] = []
+        approved_count = 0
+        blocked_invoices: set[str] = set()
 
         for item in items_on_page:
-            if action == "accept_all":
-                # Accept the model's top suggestion for every item on this page.
-                gl = item.suggested_gl
-            else:
-                gl_code = request.POST.get(f"item_{item.id}_gl", "").strip()
-                gl = GLAccount.objects.filter(code=gl_code).first() if gl_code else None
+            gl_code = request.POST.get(f"item_{item.id}_gl", "").strip()
+            gl = GLAccount.objects.filter(code=gl_code).first() if gl_code else None
+            block_reason = _approval_block_reason(item, gl) if gl else None
+
+            if block_reason:
+                blocked_invoices.add(item.invoice.invoice_number)
+                continue
 
             if gl:
                 item.approved_gl = gl
                 item.reviewed_at = now
                 to_update.append(item)
+                approved_count += 1
 
         if to_update:
             InvoiceLineItem.objects.bulk_update(to_update, ["approved_gl", "reviewed_at", "updated_at"])
 
+        if approved_count:
+            messages.success(
+                request,
+                f"Saved {approved_count} approval{'s' if approved_count != 1 else ''} from this page.",
+            )
+        if blocked_invoices:
+            blocked_list = ", ".join(sorted(blocked_invoices))
+            messages.error(
+                request,
+                f"Flagged invoice{'s' if len(blocked_invoices) != 1 else ''} require a validated property code before approval: {blocked_list}.",
+            )
+
         page = request.POST.get("page", "1")
-        return redirect(f"{request.path}?page={page}")
+        return redirect(f"{request.path}?page={page}&sort={sort_col}&dir={sort_dir}")
 
     paginator = Paginator(pending_qs, _QUEUE_PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page", 1))
+
+    # Pre-compute which invoices on this page have at least one item already
+    # approved to that invoice's own GL code. One query for the whole page.
+    page_invoice_ids = [item.invoice_id for item in page_obj]
+    invoices_with_peers = set(
+        InvoiceLineItem.objects
+        .filter(
+            invoice_id__in=page_invoice_ids,
+            approved_gl__isnull=False,
+            invoice__property_reference__isnull=False,
+            approved_gl__code=F("invoice__invoice_gl_code"),
+        )
+        .values_list("invoice_id", flat=True)
+        .distinct()
+    )
+
+    # Annotate each item with its confidence tier for the template.
+    for item in page_obj:
+        item.tier = _item_tier(item, has_invoice_peers=item.invoice_id in invoices_with_peers)
+
+    property_blocked_count = sum(1 for item in page_obj if not item.has_valid_property)
     item_ids_csv = ",".join(str(item.pk) for item in page_obj)
     gl_accounts = list(GLAccount.objects.filter(in_review_range=True).order_by("code"))
 
@@ -288,6 +379,85 @@ def review_queue_view(request: HttpRequest) -> HttpResponse:
         "gl_accounts": gl_accounts,
         "total_pending": total_pending,
         "item_ids_csv": item_ids_csv,
+        "sort_col": sort_col,
+        "sort_dir": sort_dir,
+        "property_blocked_count": property_blocked_count,
+    })
+
+
+@require_POST
+def approve_item_view(request: HttpRequest, item_id: int) -> JsonResponse:
+    """Approve a single line item via AJAX. Returns updated pending count."""
+    item = get_object_or_404(
+        InvoiceLineItem.objects.select_related("invoice", "invoice__property_reference", "suggested_gl"),
+        pk=item_id,
+        item_type=InvoiceLineItem.ItemType.PRODUCT,
+    )
+    gl_code = request.POST.get("gl_code", "").strip()
+    gl = GLAccount.objects.filter(code=gl_code).first() if gl_code else item.suggested_gl
+    block_reason = _approval_block_reason(item, gl)
+
+    if block_reason:
+        return JsonResponse({"ok": False, "error": block_reason}, status=400)
+
+    item.approved_gl = gl
+    item.reviewed_at = timezone.now()
+    item.save(update_fields=["approved_gl", "reviewed_at", "updated_at"])
+
+    pending = InvoiceLineItem.objects.filter(
+        item_type=InvoiceLineItem.ItemType.PRODUCT,
+    ).filter(
+        Q(approved_gl__isnull=True) | Q(invoice__property_reference__isnull=True)
+    ).count()
+
+    return JsonResponse({"ok": True, "pending": pending})
+
+
+def property_audit_view(request: HttpRequest) -> HttpResponse:
+    """Diagnostic: shows every raw property code found on invoices and how it resolved."""
+    from collections import defaultdict
+    from django.db.models import Count
+
+    # All unique (raw, normalized, reference) combos with invoice counts
+    combos = list(
+        Invoice.objects
+        .values("property_code_raw", "property_code_normalized", "property_reference_id")
+        .annotate(count=Count("id"))
+        .order_by("property_code_raw", "property_code_normalized")
+    )
+
+    # Group by raw code
+    raw_groups: dict = defaultdict(list)
+    for row in combos:
+        raw_groups[row["property_code_raw"]].append(row)
+
+    invoice_groups = []
+    for raw, entries in sorted(raw_groups.items(), key=lambda x: (x[0] or "")):
+        normalized_set = sorted({e["property_code_normalized"] for e in entries if e["property_code_normalized"]})
+        invoice_groups.append({
+            "raw": raw or "(blank)",
+            "total": sum(e["count"] for e in entries),
+            "normalized_set": normalized_set,
+            "matched": any(e["property_reference_id"] for e in entries),
+            "inconsistent": len(normalized_set) > 1,
+        })
+
+    # All known PropertyReferences annotated with how many invoices they received
+    references = list(
+        PropertyReference.objects
+        .annotate(invoice_count=Count("invoices"))
+        .order_by("normalized_code")
+    )
+
+    total = Invoice.objects.count()
+    matched = Invoice.objects.filter(property_reference__isnull=False).count()
+
+    return render(request, "invoices/property_audit.html", {
+        "invoice_groups": invoice_groups,
+        "references": references,
+        "total_invoices": total,
+        "matched_invoices": matched,
+        "unmatched_invoices": total - matched,
     })
 
 

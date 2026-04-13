@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 _model = None
 _model_lock = threading.Lock()
-_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+_MODEL_NAME = "BAAI/bge-base-en-v1.5"
 
 
 def _get_model():
@@ -124,7 +124,11 @@ def _get_approved_history_embeddings() -> tuple[object, list[str]]:
 
     approved = list(
         InvoiceLineItem.objects
-        .filter(approved_gl__isnull=False, item_type=InvoiceLineItem.ItemType.PRODUCT)
+        .filter(
+            approved_gl__isnull=False,
+            invoice__property_reference__isnull=False,
+            item_type=InvoiceLineItem.ItemType.PRODUCT,
+        )
         .select_related("approved_gl")
         .values_list("description", "approved_gl__code")
     )
@@ -202,8 +206,8 @@ def score_description_against_gl(
 
 def score_against_approved_history(
     description: str,
-    k: int = 5,
-    min_similarity: float = 0.45,
+    k: int | None = None,
+    min_similarity: float | None = None,
 ) -> dict[str, float]:
     """
     KNN vote over previously approved line items using embedding similarity.
@@ -214,16 +218,16 @@ def score_against_approved_history(
     approved GL code receives a vote weighted by the similarity score. The
     returned dict maps GL code → total weighted vote (higher = stronger signal).
 
-    Parameters
-    ----------
-    description     : text of the line item being classified
-    k               : number of nearest neighbors to consider
-    min_similarity  : neighbors below this threshold are ignored (noise filter)
-
-    Returns an empty dict if there are no approved items or the model is
-    unavailable. The caller should treat a missing key as a score of 0.
+    k and min_similarity default to settings.ML_CONFIG values when not supplied.
     """
+    from django.conf import settings
     import numpy as np
+
+    cfg = settings.ML_CONFIG
+    if k is None:
+        k = cfg["KNN_K"]
+    if min_similarity is None:
+        min_similarity = cfg["KNN_MIN_SIMILARITY"]
 
     model = _get_model()
     if model is None:

@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -63,10 +64,19 @@ class Invoice(models.Model):
         ordering = ["-invoice_date", "-created_at"]
 
     @property
+    def has_valid_property(self) -> bool:
+        return self.property_reference_id is not None
+
+    @property
+    def property_status_label(self) -> str:
+        return self.property_code_normalized or self.property_code_raw or "Missing property code"
+
+    @property
     def pending_review_count(self) -> int:
         return self.line_items.filter(
             item_type=InvoiceLineItem.ItemType.PRODUCT,
-            approved_gl__isnull=True,
+        ).filter(
+            Q(approved_gl__isnull=True) | Q(invoice__property_reference__isnull=True)
         ).count()
 
     def __str__(self) -> str:
@@ -123,8 +133,24 @@ class InvoiceLineItem(models.Model):
         return self.approved_gl or self.suggested_gl
 
     @property
+    def has_valid_property(self) -> bool:
+        return self.invoice.property_reference_id is not None
+
+    @property
+    def approval_block_reason(self) -> str:
+        if self.has_valid_property:
+            return ""
+        return (
+            "Missing validated property code "
+            f"for invoice {self.invoice.invoice_number}."
+        )
+
+    @property
     def needs_review(self) -> bool:
-        return self.item_type == self.ItemType.PRODUCT and self.approved_gl_id is None
+        return (
+            self.item_type == self.ItemType.PRODUCT
+            and (self.approved_gl_id is None or not self.has_valid_property)
+        )
 
     def mark_reviewed(self) -> None:
         self.reviewed_at = timezone.now()

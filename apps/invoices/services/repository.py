@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 
 from ..models import GLAccount, Invoice, InvoiceLineItem
 from ..schemas import ParsedInvoice
@@ -78,6 +79,24 @@ class InvoiceRepositoryService:
                     approved_gl=approved_gl,
                     approval_notes=parsed_line_item.approval_notes,
                 )
+
+            # Auto-approve: single product line item + invoice has a GL code.
+            # The invoice already told us the answer — no review needed.
+            if invoice.invoice_gl_code and invoice.property_reference_id:
+                product_items = list(
+                    InvoiceLineItem.objects.filter(
+                        invoice=invoice,
+                        item_type=InvoiceLineItem.ItemType.PRODUCT,
+                    )
+                )
+                if len(product_items) == 1:
+                    gl = GLAccount.objects.filter(code=invoice.invoice_gl_code).first()
+                    if gl:
+                        item = product_items[0]
+                        item.approved_gl = gl
+                        item.approval_notes = "Auto-approved: single line item with invoice GL code."
+                        item.reviewed_at = timezone.now()
+                        item.save(update_fields=["approved_gl", "approval_notes", "reviewed_at", "updated_at"])
 
             saved_invoices.append(invoice)
 

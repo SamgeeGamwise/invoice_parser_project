@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invoice Parser &mdash; Property Code Audit</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
+            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
+            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
+        }
+        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+
+        nav {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
+        }
+        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
+        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+        nav a:hover { color: var(--blue); }
+
+        main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+
+        .notice {
+            display: flex; align-items: center; gap: 0.6rem;
+            background: #fef3c7; border: 1px solid #fde68a; border-radius: 10px;
+            padding: 0.65rem 1rem; font-size: 0.87rem; color: #92400e;
+            margin-bottom: 1.5rem;
+        }
+
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; }
+        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+        h2 { font-size: 1.05rem; margin: 0 0 1rem; }
+        p  { margin: 0.4rem 0; color: var(--muted); font-size: 0.92rem; }
+
+        .stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+        .stat-pill {
+            padding: 0.35rem 0.9rem; border-radius: 99px; font-size: 0.83rem; font-weight: 600;
+        }
+        .stat-total   { background: #eff6ff; color: var(--blue); }
+        .stat-matched { background: #f0fdf4; color: var(--green); }
+        .stat-miss    { background: #fff1f2; color: var(--red); }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+        th {
+            text-align: left; padding: 0.5rem 0.75rem;
+            font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--muted); border-bottom: 2px solid var(--border); white-space: nowrap;
+        }
+        td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #f8fafc; }
+
+        .badge {
+            display: inline-block; padding: 0.15rem 0.55rem; border-radius: 99px;
+            font-size: 0.74rem; font-weight: 600; white-space: nowrap;
+        }
+        .badge-ok      { background: #f0fdf4; color: var(--green); border: 1px solid #bbf7d0; }
+        .badge-miss    { background: #fff1f2; color: var(--red);   border: 1px solid #fecaca; }
+        .badge-warn    { background: #fef3c7; color: #92400e;      border: 1px solid #fde68a; }
+        .badge-none    { background: #f8fafc; color: var(--muted); border: 1px solid var(--border); }
+
+        .code { font-family: monospace; font-size: 0.85rem; }
+        .count { font-weight: 600; color: var(--text); }
+        .normalized-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+        .norm-tag {
+            font-family: monospace; font-size: 0.8rem;
+            background: #f1f5f9; border: 1px solid var(--border);
+            border-radius: 5px; padding: 0.1rem 0.4rem;
+        }
+
+        .section-divider { margin: 0.5rem 0 1rem; border: none; border-top: 1px solid var(--border); }
+
+        a { color: var(--blue); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
+    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
+    <a href="{% url 'invoices:reports' %}">Reports</a>
+</nav>
+
+<main>
+
+    <div class="notice">
+        ⚠ Diagnostic page &mdash; for testing purposes only. Not linked from the main navigation.
+    </div>
+
+    <div class="card">
+        <h1>Property Code Audit</h1>
+        <p>Every unique raw property code extracted from your invoices, how it normalized, and whether it matched a known property reference.</p>
+        <div class="stats">
+            <span class="stat-pill stat-total">{{ total_invoices }} invoice{{ total_invoices|pluralize }}</span>
+            <span class="stat-pill stat-matched">{{ matched_invoices }} matched</span>
+            <span class="stat-pill stat-miss">{{ unmatched_invoices }} unmatched</span>
+        </div>
+    </div>
+
+    <!-- Section 1: Raw codes from invoices -->
+    <div class="card">
+        <h2>Raw codes found on invoices</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Raw (from PDF)</th>
+                    <th>Normalized to</th>
+                    <th>Invoices</th>
+                    <th>Reference match</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for group in invoice_groups %}
+                <tr>
+                    <td><span class="code">{{ group.raw }}</span></td>
+                    <td>
+                        {% if group.normalized_set %}
+                        <div class="normalized-list">
+                            {% for code in group.normalized_set %}
+                            <span class="norm-tag">{{ code }}</span>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span style="color:var(--muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="count">{{ group.total }}</span></td>
+                    <td>
+                        {% if group.matched %}
+                        <span class="badge badge-ok">&#10003; Matched</span>
+                        {% else %}
+                        <span class="badge badge-miss">&#10007; No match</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if group.inconsistent %}
+                        <span class="badge badge-warn">⚠ Multiple normalizations</span>
+                        {% elif not group.matched %}
+                        <span class="badge badge-miss">Not in reference data</span>
+                        {% else %}
+                        <span class="badge badge-none">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" style="color:var(--muted); text-align:center; padding:2rem;">No invoices found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Section 2: Known references vs invoice coverage -->
+    <div class="card">
+        <h2>Known property references</h2>
+        <p>All entries from your reference data file, with how many invoices resolved to each one.</p>
+        <hr class="section-divider">
+        <table>
+            <thead>
+                <tr>
+                    <th>Normalized code</th>
+                    <th>Yardi code</th>
+                    <th>Website ID</th>
+                    <th>Invoices matched</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ref in references %}
+                <tr>
+                    <td><span class="code">{{ ref.normalized_code }}</span></td>
+                    <td><span class="code">{{ ref.yardi_code }}</span></td>
+                    <td>
+                        {% if ref.website_id %}
+                        <span class="code">{{ ref.website_id }}</span>
+                        {% else %}
+                        <span style="color:var(--muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ref.invoice_count %}
+                        <span class="count">{{ ref.invoice_count }}</span>
+                        {% else %}
+                        <span class="badge badge-warn">0 &mdash; no invoices</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" style="color:var(--muted); text-align:center; padding:2rem;">No property references loaded.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</main>
+</body>
+</html>

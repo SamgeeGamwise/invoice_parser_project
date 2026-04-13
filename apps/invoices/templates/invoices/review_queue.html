@@ -6,116 +6,664 @@
     <title>Invoice Parser &mdash; Review Queue</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; }
+
         :root {
-            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
-            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
-            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
+            --bg: #eef2f8;
+            --surface: #ffffff;
+            --surface-soft: #f8fafc;
+            --surface-tint: #eff6ff;
+            --border: #dbe4f0;
+            --border-strong: #c7d4e5;
+            --text: #10203a;
+            --muted: #5e718d;
+            --blue: #2563eb;
+            --blue-deep: #1d4ed8;
+            --green: #15803d;
+            --amber: #b45309;
+            --red: #dc2626;
+            --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+            --radius: 18px;
+
+            --tier-auto-bg: #f0fdf4;
+            --tier-auto-bar: #16a34a;
+            --tier-confirm-bg: #fffbeb;
+            --tier-confirm-bar: #d97706;
+            --tier-review-bg: #fff1f2;
+            --tier-review-bar: #dc2626;
         }
-        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 24rem),
+                linear-gradient(180deg, #f8fbff 0%, var(--bg) 32%, #edf2f8 100%);
+        }
 
         nav {
-            background: var(--surface); border-bottom: 1px solid var(--border);
-            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
-        }
-        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
-        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-        nav a:hover, nav a.active { color: var(--blue); }
-
-        main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-
-        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
-
-        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
-        p  { margin: 0.4rem 0; color: var(--muted); font-size: 0.92rem; }
-
-        /* ── Toolbar ── */
-        .toolbar {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-            margin-bottom: 1rem;
-        }
-        .toolbar-left { display: flex; align-items: center; gap: 0.75rem; }
-        .toolbar-right { display: flex; align-items: center; gap: 0.5rem; }
-
-        .badge-pending {
-            background: #fef3c7; color: #92400e;
-            border-radius: 99px; padding: 0.2rem 0.7rem;
-            font-size: 0.8rem; font-weight: 600;
+            gap: 1.6rem;
+            height: 58px;
+            padding: 0 1.5rem;
+            background: rgba(255, 255, 255, 0.88);
+            border-bottom: 1px solid rgba(199, 212, 229, 0.8);
+            backdrop-filter: blur(14px);
+            position: sticky;
+            top: 0;
+            z-index: 40;
         }
 
-        /* ── Buttons ── */
-        .btn {
-            display: inline-block; padding: 0.55rem 1.1rem; border-radius: 8px;
-            font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; border: none;
+        .brand {
+            margin-right: 0.2rem;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--blue);
             text-decoration: none;
         }
-        .btn-primary  { background: var(--blue); color: #fff; }
-        .btn-primary:hover  { background: #1d4ed8; }
-        .btn-green    { background: var(--green); color: #fff; }
-        .btn-green:hover    { background: #15803d; }
-        .btn-outline  { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
-        .btn-outline:hover  { background: #eff6ff; }
-        .btn-sm { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
 
-        /* ── Table ── */
-        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-        th {
-            text-align: left; padding: 0.55rem 0.6rem;
-            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
-            color: var(--muted); border-bottom: 2px solid var(--border);
+        nav a {
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.92rem;
+        }
+
+        nav a:hover,
+        nav a.active { color: var(--blue); }
+
+        main {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 2rem 1.25rem 3rem;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(219, 228, 240, 0.95);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 1.25rem;
+        }
+
+        .intro-card {
+            padding: 1.5rem;
+            background:
+                linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.88)),
+                var(--surface);
+        }
+
+        h1 {
+            margin: 0 0 0.35rem;
+            font-size: 1.55rem;
+            line-height: 1.15;
+        }
+
+        p {
+            margin: 0.4rem 0;
+            font-size: 0.93rem;
+            color: var(--muted);
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem 1.25rem;
+            margin-top: 1rem;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            font-size: 0.83rem;
+            color: var(--muted);
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            flex-shrink: 0;
+        }
+
+        .dot-auto { background: var(--tier-auto-bar); }
+        .dot-confirm { background: var(--tier-confirm-bar); }
+        .dot-review { background: var(--tier-review-bar); }
+
+        .queue-card { padding: 1rem 1.2rem 1.2rem; }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .toolbar-group {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+        }
+
+        .badge-pending {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            width: fit-content;
+            padding: 0.35rem 0.85rem;
+            border-radius: 999px;
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .page-info,
+        .toolbar-hint {
+            font-size: 0.84rem;
+            color: var(--muted);
+        }
+
+        .toolbar-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.55rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            min-height: 38px;
+            padding: 0.5rem 0.95rem;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            font: inherit;
+            font-size: 0.86rem;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+        }
+
+        .btn:hover { transform: translateY(-1px); }
+
+        .btn-primary {
+            color: #fff;
+            background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.18);
+        }
+
+        .btn-primary:hover { background: linear-gradient(135deg, var(--blue-deep), #1e40af); }
+
+        .btn-outline {
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.88);
+            border-color: var(--border);
+        }
+
+        .btn-outline:hover {
+            color: var(--blue);
+            border-color: var(--blue);
+            background: #eff6ff;
+        }
+
+        .btn-accept {
+            min-height: 34px;
+            padding: 0.42rem 0.72rem;
+            color: #fff;
+            background: linear-gradient(135deg, #16a34a, var(--green));
+            box-shadow: none;
+        }
+
+        .btn-accept:hover { background: linear-gradient(135deg, #15803d, #166534); }
+
+        .control-wrap { position: relative; }
+
+        .control-menu {
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            right: 0;
+            width: min(18rem, calc(100vw - 2rem));
+            padding: 0.85rem;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
+            z-index: 60;
+        }
+
+        .control-menu[hidden] { display: none; }
+
+        .menu-title {
+            margin: 0 0 0.25rem;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .menu-help {
+            margin: 0 0 0.7rem;
+            font-size: 0.79rem;
+            color: var(--muted);
+        }
+
+        .menu-option {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.35rem 0;
+            font-size: 0.84rem;
+            color: var(--text);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .menu-option input[type="checkbox"] {
+            margin: 0;
+            accent-color: var(--blue);
+            cursor: pointer;
+        }
+
+        .table-shell {
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+        }
+
+        .table-wrap {
+            overflow: auto;
+            overscroll-behavior-x: contain;
+        }
+
+        table {
+            width: 100%;
+            min-width: 980px;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+            font-size: 0.88rem;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            padding: 0.8rem 0.8rem;
+            text-align: left;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--muted);
+            background: rgba(248, 250, 252, 0.96);
+            border-bottom: 1px solid var(--border-strong);
             white-space: nowrap;
+            overflow: hidden;
         }
-        td { padding: 0.65rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
-        tr:last-child td { border-bottom: none; }
-        tr:hover td { background: #f8fafc; }
 
-        .desc { max-width: 320px; }
-        .desc-text { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
-        .invoice-link { font-size: 0.8rem; color: var(--muted); }
-        .invoice-link a { color: var(--blue); }
-
-        .confidence-bar {
-            display: flex; align-items: center; gap: 0.4rem;
-            font-size: 0.78rem; color: var(--muted);
+        thead th.sorted {
+            color: var(--blue);
+            background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(248, 250, 252, 0.96));
         }
-        .bar-track { flex: 1; max-width: 60px; background: #e2e8f0; border-radius: 99px; height: 5px; overflow: hidden; }
-        .bar-fill  { height: 100%; border-radius: 99px; background: var(--green); }
 
-        .suggested-label {
-            font-size: 0.82rem; color: var(--text); font-weight: 500; white-space: nowrap;
+        th .sort-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.32rem;
+            max-width: calc(100% - 0.35rem);
+            color: inherit;
+            text-decoration: none;
         }
+
+        th .sort-link:hover { color: var(--blue); }
+
+        .sort-arrow {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.1rem;
+            height: 1.1rem;
+            border-radius: 999px;
+            font-size: 0.68rem;
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--blue);
+            flex-shrink: 0;
+        }
+
+        .resize-handle {
+            position: absolute;
+            top: 0;
+            right: -4px;
+            width: 12px;
+            height: 100%;
+            cursor: col-resize;
+            z-index: 3;
+            touch-action: none;
+        }
+
+        .resize-handle::after {
+            content: "";
+            position: absolute;
+            top: 18%;
+            bottom: 18%;
+            left: 50%;
+            width: 2px;
+            border-radius: 999px;
+            background: transparent;
+            transform: translateX(-50%);
+            transition: background 0.16s ease;
+        }
+
+        .resize-handle:hover::after,
+        .resize-handle.dragging::after { background: rgba(37, 99, 235, 0.65); }
+
+        tbody td {
+            padding: 0.82rem 0.8rem;
+            border-bottom: 1px solid rgba(219, 228, 240, 0.88);
+            vertical-align: middle;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.92);
+        }
+
+
+        tbody tr:hover td { background: rgba(248, 250, 252, 0.98); }
+        tbody tr:last-child td { border-bottom: none; }
+
+        .tier-auto td { background: #f7fdf8; }
+        .tier-confirm td { background: #fffdf5; }
+        .tier-review td { background: #fff8f8; }
+
+        .tier-auto td.first-visible { box-shadow: inset 4px 0 0 var(--tier-auto-bar); }
+        .tier-confirm td.first-visible { box-shadow: inset 4px 0 0 var(--tier-confirm-bar); }
+        .tier-review td.first-visible { box-shadow: inset 4px 0 0 var(--tier-review-bar); }
+
+        td.is-hidden,
+        th.is-hidden,
+        col.is-hidden { display: none; }
+
+        tr.removing {
+            opacity: 0;
+            transform: translateX(12px);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+
+        .desc-text {
+            display: block;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .invoice-ref {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            white-space: nowrap;
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        .invoice-ref a {
+            color: var(--blue);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .invoice-ref a:hover { text-decoration: underline; }
+
+        .amount-cell {
+            white-space: nowrap;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .suggestion-code {
+            display: block;
+            font-size: 0.83rem;
+            font-weight: 700;
+        }
+
+        .suggestion-copy {
+            display: block;
+            margin-top: 0.15rem;
+            color: var(--muted);
+            font-size: 0.77rem;
+            line-height: 1.35;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .empty-copy {
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .confidence-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            white-space: nowrap;
+            color: var(--muted);
+            font-size: 0.79rem;
+        }
+
+        .bar-track {
+            width: 62px;
+            height: 6px;
+            border-radius: 999px;
+            background: #dbe4f0;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: inherit;
+        }
+
+        .fill-auto { background: var(--tier-auto-bar); }
+        .fill-confirm { background: var(--tier-confirm-bar); }
+        .fill-review { background: var(--tier-review-bar); }
+
+        .confidence-value { font-variant-numeric: tabular-nums; }
 
         select {
-            font: inherit; font-size: 0.85rem; padding: 0.35rem 0.5rem;
-            border: 1px solid var(--border); border-radius: 6px;
-            background: var(--surface); color: var(--text);
-            width: 100%; min-width: 180px; max-width: 240px;
+            width: 100%;
+            min-height: 36px;
+            padding: 0.45rem 0.55rem;
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            background: rgba(255, 255, 255, 0.94);
+            color: var(--text);
+            font: inherit;
+            font-size: 0.83rem;
         }
-        select:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: transparent; }
 
-        /* ── Pagination ── */
+        select:focus {
+            outline: none;
+            border-color: rgba(37, 99, 235, 0.45);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+
+        /* ── GL searchable combobox ── */
+        .gl-input {
+            width: 100%;
+            min-height: 36px;
+            padding: 0.4rem 0.55rem;
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            background: rgba(255,255,255,0.94);
+            color: var(--text);
+            font: inherit;
+            font-size: 0.83rem;
+        }
+        .gl-input:focus {
+            outline: none;
+            border-color: rgba(37,99,235,0.45);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+        }
+        .gl-input::placeholder { color: var(--muted); }
+
+        /* Portal dropdown — appended to <body>, positioned via JS */
+        .gl-dropdown {
+            position: fixed;
+            max-height: 220px;
+            overflow-y: auto;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(15,23,42,0.14);
+            z-index: 9999;
+        }
+        .gl-dropdown[hidden] { display: none; }
+
+        .gl-option {
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+            padding: 0.45rem 0.7rem;
+            cursor: pointer;
+            font-size: 0.83rem;
+        }
+        .gl-option:hover, .gl-option.active { background: #eff6ff; }
+        .gl-opt-code {
+            font-family: monospace;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--blue);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .gl-opt-desc { color: var(--text); font-size: 0.8rem; }
+        .gl-opt-desc em { font-style: normal; background: #fef08a; border-radius: 2px; padding: 0 1px; }
+
+        .gl-no-results {
+            padding: 0.6rem 0.7rem;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .gl-diff-badge {
+            display: inline-block;
+            margin-bottom: 0.3rem;
+            padding: 0.1rem 0.45rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            border-radius: 99px;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            white-space: nowrap;
+        }
+
+        .footer-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .footer-note {
+            font-size: 0.82rem;
+            color: var(--muted);
+        }
+
         .pagination {
-            display: flex; align-items: center; justify-content: center;
-            gap: 0.4rem; margin-top: 1.5rem; flex-wrap: wrap;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+            margin-top: 1.4rem;
         }
+
         .page-btn {
-            padding: 0.4rem 0.75rem; border-radius: 6px; font: inherit;
-            font-size: 0.85rem; cursor: pointer; border: 1px solid var(--border);
-            background: var(--surface); color: var(--text); text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 0.45rem 0.8rem;
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            background: rgba(255, 255, 255, 0.94);
+            color: var(--text);
+            font-size: 0.85rem;
+            text-decoration: none;
+            transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
         }
-        .page-btn:hover { border-color: var(--blue); color: var(--blue); }
-        .page-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
-        .page-btn:disabled { opacity: 0.4; cursor: default; }
 
-        .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
-        .empty-state .icon { font-size: 3rem; display: block; margin-bottom: 0.75rem; }
-        .empty-state strong { display: block; color: var(--text); font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .page-btn:hover {
+            color: var(--blue);
+            border-color: var(--blue);
+            background: #eff6ff;
+        }
 
-        a { color: var(--blue); text-decoration: none; }
-        a:hover { text-decoration: underline; }
+        .page-btn.active {
+            color: #fff;
+            border-color: var(--blue);
+            background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+        }
+
+        .empty-state {
+            padding: 3rem 1.5rem;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .empty-state .icon {
+            display: block;
+            margin-bottom: 0.75rem;
+            font-size: 2.9rem;
+        }
+
+        .empty-state strong {
+            display: block;
+            margin-bottom: 0.4rem;
+            color: var(--text);
+            font-size: 1.1rem;
+        }
+
+        @media (max-width: 900px) {
+            main { padding-inline: 0.9rem; }
+            .queue-card { padding-inline: 0.9rem; }
+            .toolbar-actions { justify-content: flex-start; }
+            .footer-actions { align-items: stretch; }
+        }
+
+        @media (max-width: 640px) {
+            nav {
+                gap: 1rem;
+                padding-inline: 1rem;
+                overflow-x: auto;
+            }
+
+            main { padding-top: 1.35rem; }
+            .intro-card { padding: 1.2rem; }
+            .queue-card { padding: 0.85rem; }
+            .toolbar { margin-bottom: 0.8rem; }
+            .toolbar-hint { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -129,137 +677,199 @@
 </nav>
 
 <main>
-
-    <div class="card">
+    <div class="card intro-card">
         <h1>Review Queue</h1>
-        <p>Approve or override the suggested GL code for each line item. Items reviewed here update the model's suggestions for future invoices.</p>
+        <p>Approve or override the suggested GL code for each line item. The queue keeps server-side sorting for reliability, and your column layout stays local to this browser.</p>
+        <div class="legend" aria-label="Confidence tiers">
+            <span class="legend-item"><span class="legend-dot dot-auto"></span>Auto-approve candidate</span>
+            <span class="legend-item"><span class="legend-dot dot-confirm"></span>Quick confirm</span>
+            <span class="legend-item"><span class="legend-dot dot-review"></span>Needs review</span>
+        </div>
     </div>
 
     {% if page_obj.object_list %}
-
-    <form method="post">
+    <form method="post" id="queue-form">
         {% csrf_token %}
         <input type="hidden" name="item_ids" value="{{ item_ids_csv }}">
         <input type="hidden" name="page" value="{{ page_obj.number }}">
 
-        <div class="card" style="padding: 1rem 1.5rem;">
+        <div class="card queue-card">
             <div class="toolbar">
-                <div class="toolbar-left">
-                    <span class="badge-pending">{{ total_pending }} item{{ total_pending|pluralize }} remaining</span>
-                    <span style="font-size: 0.85rem; color: var(--muted);">
-                        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-                        &mdash; showing {{ page_obj.start_index }}–{{ page_obj.end_index }}
-                    </span>
+                <div class="toolbar-meta">
+                    <span class="badge-pending" id="pending-badge">{{ total_pending }} item{{ total_pending|pluralize }} remaining</span>
+                    <span class="page-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} &mdash; {{ page_obj.start_index }}&ndash;{{ page_obj.end_index }}</span>
+                    <span class="toolbar-hint">Click a header to sort, use Columns to hide fields, and drag a header edge to resize.</span>
                 </div>
-                <div class="toolbar-right">
-                    <button type="submit" name="action" value="accept_all" class="btn btn-green btn-sm">
-                        Accept all suggestions on this page
-                    </button>
-                    <button type="submit" name="action" value="save" class="btn btn-primary btn-sm">
-                        Save this page
-                    </button>
+
+                <div class="toolbar-actions">
+                    <div class="control-wrap">
+                        <button
+                            type="button"
+                            class="btn btn-outline"
+                            id="column-menu-button"
+                            aria-haspopup="true"
+                            aria-expanded="false">
+                            Columns
+                        </button>
+                        <div class="control-menu" id="column-menu" hidden>
+                            <p class="menu-title">Visible columns</p>
+                            <p class="menu-help">Description, Approve as, and Accept stay pinned so the queue remains usable.</p>
+                            <label class="menu-option"><input type="checkbox" data-col-toggle="invoice" checked> Invoice</label>
+                            <label class="menu-option"><input type="checkbox" data-col-toggle="amount" checked> Amount</label>
+                            <label class="menu-option"><input type="checkbox" data-col-toggle="suggestion" checked> Invoice GL</label>
+                            <label class="menu-option"><input type="checkbox" data-col-toggle="confidence" checked> Confidence</label>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-outline" id="reset-table-button">Reset table</button>
+                    <button type="submit" class="btn btn-primary">Save page</button>
                 </div>
             </div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>Description</th>
-                        <th>Invoice</th>
-                        <th>Amount</th>
-                        <th>Suggestion</th>
-                        <th>Approve as</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in page_obj %}
-                    <tr>
-                        <td class="desc">
-                            <span class="desc-text" title="{{ item.description }}">{{ item.description }}</span>
-                        </td>
-                        <td>
-                            <span class="invoice-link">
-                                <a href="{% url 'invoices:invoice_detail' item.invoice_id %}">{{ item.invoice.invoice_number }}</a>
-                            </span>
-                        </td>
-                        <td style="white-space: nowrap;">
-                            {% if item.line_total %}${{ item.line_total }}{% else %}&mdash;{% endif %}
-                        </td>
-                        <td>
-                            {% if item.suggested_gl %}
-                            <span class="suggested-label">{{ item.suggested_gl.code }}</span>
-                            <span style="font-size: 0.78rem; color: var(--muted); display: block;">{{ item.suggested_gl.description }}</span>
-                            {% if item.suggested_confidence %}
-                            <div class="confidence-bar" style="margin-top: 0.25rem;">
-                                <div class="bar-track">
-                                    <div class="bar-fill" style="width: {% widthratio item.suggested_confidence 1 100 %}%"></div>
-                                </div>
-                                <span>{{ item.suggested_confidence }}</span>
-                            </div>
-                            {% endif %}
-                            {% else %}
-                            <span style="color: var(--muted); font-size: 0.82rem;">No suggestion</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <select name="item_{{ item.id }}_gl"
-                                    id="sel_{{ item.id }}"
-                                    data-suggested="{{ item.suggested_gl.code|default:'' }}">
-                                <option value="">— skip —</option>
-                                {% for gl in gl_accounts %}
-                                <option value="{{ gl.code }}"
-                                    {% if item.suggested_gl and item.suggested_gl.code == gl.code %}selected{% endif %}>
-                                    {{ gl.code }} &ndash; {{ gl.description }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </td>
-                        <td>
-                            <button type="button" class="btn btn-outline btn-sm"
-                                    onclick="acceptSuggestion('{{ item.id }}')">
-                                Accept
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="table-shell">
+                <div class="table-wrap">
+                    <table id="queue-table">
+                        <colgroup>
+                            <col id="col-desc" data-col-id="desc" style="width: 400px;">
+                            <col id="col-invoice" data-col-id="invoice" style="width: 124px;">
+                            <col id="col-amount" data-col-id="amount" style="width: 104px;">
+                            <col id="col-suggestion" data-col-id="suggestion" style="width: 210px;">
+                            <col id="col-confidence" data-col-id="confidence" style="width: 132px;">
+                            <col id="col-gl" data-col-id="gl" style="width: 210px;">
+                            <col id="col-actions" data-col-id="actions" style="width: 96px;">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th data-col-id="desc" class="{% if sort_col == 'description' %}sorted{% endif %}">
+                                    <a class="sort-link" href="?sort=description&dir={% if sort_col == 'description' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}">
+                                        Description
+                                        {% if sort_col == 'description' %}<span class="sort-arrow">{% if sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                                    </a>
+                                    <span class="resize-handle" data-resize-col="desc" aria-hidden="true"></span>
+                                </th>
+                                <th data-col-id="invoice" class="{% if sort_col == 'invoice' %}sorted{% endif %}">
+                                    <a class="sort-link" href="?sort=invoice&dir={% if sort_col == 'invoice' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}">
+                                        Invoice
+                                        {% if sort_col == 'invoice' %}<span class="sort-arrow">{% if sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                                    </a>
+                                    <span class="resize-handle" data-resize-col="invoice" aria-hidden="true"></span>
+                                </th>
+                                <th data-col-id="amount" class="{% if sort_col == 'amount' %}sorted{% endif %}">
+                                    <a class="sort-link" href="?sort=amount&dir={% if sort_col == 'amount' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}">
+                                        Amount
+                                        {% if sort_col == 'amount' %}<span class="sort-arrow">{% if sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                                    </a>
+                                    <span class="resize-handle" data-resize-col="amount" aria-hidden="true"></span>
+                                </th>
+                                <th data-col-id="suggestion" class="{% if sort_col == 'gl' %}sorted{% endif %}">
+                                    <a class="sort-link" href="?sort=gl&dir={% if sort_col == 'gl' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}">
+                                        Invoice GL
+                                        {% if sort_col == 'gl' %}<span class="sort-arrow">{% if sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                                    </a>
+                                    <span class="resize-handle" data-resize-col="suggestion" aria-hidden="true"></span>
+                                </th>
+                                <th data-col-id="confidence" class="{% if sort_col == 'confidence' %}sorted{% endif %}">
+                                    <a class="sort-link" href="?sort=confidence&dir={% if sort_col == 'confidence' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}">
+                                        Confidence
+                                        {% if sort_col == 'confidence' %}<span class="sort-arrow">{% if sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
+                                    </a>
+                                    <span class="resize-handle" data-resize-col="confidence" aria-hidden="true"></span>
+                                </th>
+                                <th data-col-id="gl">
+                                    Approve as
+                                    <span class="resize-handle" data-resize-col="gl" aria-hidden="true"></span>
+                                </th>
+                                <th data-col-id="actions">
+                                    Accept
+                                    <span class="resize-handle" data-resize-col="actions" aria-hidden="true"></span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in page_obj %}
+                            <tr class="tier-{{ item.tier }}" id="row-{{ item.id }}" data-item-id="{{ item.id }}">
+                                <td data-col-id="desc">
+                                    <span class="desc-text" title="{{ item.description }}">{{ item.description }}</span>
+                                </td>
+                                <td data-col-id="invoice">
+                                    <span class="invoice-ref">
+                                        <a href="{% url 'invoices:invoice_detail' item.invoice_id %}">{{ item.invoice.invoice_number }}</a>
+                                    </span>
+                                </td>
+                                <td data-col-id="amount" class="amount-cell">
+                                    {% if item.line_total %}${{ item.line_total }}{% else %}&mdash;{% endif %}
+                                </td>
+                                <td data-col-id="suggestion">
+                                    {% if item.invoice_gl_code_hint %}
+                                    <span class="suggestion-code">{{ item.invoice_gl_code_hint }}</span>
+                                    {% else %}
+                                    <span class="empty-copy">—</span>
+                                    {% endif %}
+                                </td>
+                                <td data-col-id="confidence">
+                                    {% if item.suggested_confidence %}
+                                    <div class="confidence-wrap">
+                                        <div class="bar-track">
+                                            <div class="bar-fill fill-{{ item.tier }}" style="width:{% widthratio item.suggested_confidence 1 100 %}%"></div>
+                                        </div>
+                                        <span class="confidence-value">{{ item.suggested_confidence }}</span>
+                                    </div>
+                                    {% else %}
+                                    &mdash;
+                                    {% endif %}
+                                </td>
+                                <td data-col-id="gl">
+                                    {% if item.suggested_gl and item.invoice_gl_code_hint and item.suggested_gl.code != item.invoice_gl_code_hint %}
+                                    <span class="gl-diff-badge" title="Invoice says {{ item.invoice_gl_code_hint }}, model suggests {{ item.suggested_gl.code }}">⚠ ML override</span><br>
+                                    {% endif %}
+                                    <div class="gl-search">
+                                        <input type="text" class="gl-input"
+                                               placeholder="Search by name or code…"
+                                               autocomplete="off">
+                                        <input type="hidden"
+                                               name="item_{{ item.id }}_gl"
+                                               id="sel_{{ item.id }}"
+                                               value="{{ item.suggested_gl.code|default:'' }}"
+                                               data-suggested="{{ item.suggested_gl.code|default:'' }}">
+                                    </div>
+                                </td>
+                                <td data-col-id="actions">
+                                    <button type="button" class="btn btn-accept" onclick="acceptItem({{ item.id }})">Accept</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-                <button type="submit" name="action" value="accept_all" class="btn btn-green">
-                    Accept all suggestions on this page
-                </button>
-                <button type="submit" name="action" value="save" class="btn btn-primary">
-                    Save this page
-                </button>
+            <div class="footer-actions">
+                <span class="footer-note">Column changes are saved in local storage for this browser only.</span>
+                <button type="submit" class="btn btn-primary">Save page</button>
             </div>
         </div>
     </form>
 
-    <!-- Pagination -->
     <div class="pagination">
         {% if page_obj.has_previous %}
-        <a class="page-btn" href="?page=1">&laquo; First</a>
-        <a class="page-btn" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        <a class="page-btn" href="?page=1&sort={{ sort_col }}&dir={{ sort_dir }}">&laquo; First</a>
+        <a class="page-btn" href="?page={{ page_obj.previous_page_number }}&sort={{ sort_col }}&dir={{ sort_dir }}">Previous</a>
         {% endif %}
 
         {% for num in page_obj.paginator.page_range %}
             {% if num == page_obj.number %}
             <span class="page-btn active">{{ num }}</span>
             {% elif num >= page_obj.number|add:"-3" and num <= page_obj.number|add:"3" %}
-            <a class="page-btn" href="?page={{ num }}">{{ num }}</a>
+            <a class="page-btn" href="?page={{ num }}&sort={{ sort_col }}&dir={{ sort_dir }}">{{ num }}</a>
             {% endif %}
         {% endfor %}
 
         {% if page_obj.has_next %}
-        <a class="page-btn" href="?page={{ page_obj.next_page_number }}">Next</a>
-        <a class="page-btn" href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+        <a class="page-btn" href="?page={{ page_obj.next_page_number }}&sort={{ sort_col }}&dir={{ sort_dir }}">Next</a>
+        <a class="page-btn" href="?page={{ page_obj.paginator.num_pages }}&sort={{ sort_col }}&dir={{ sort_dir }}">Last &raquo;</a>
         {% endif %}
     </div>
-
     {% else %}
-
     <div class="card">
         <div class="empty-state">
             <span class="icon">✅</span>
@@ -269,17 +879,407 @@
             <a class="btn btn-outline" href="{% url 'invoices:reports' %}">View Reports</a>
         </div>
     </div>
-
     {% endif %}
-
 </main>
 
 <script>
-    function acceptSuggestion(itemId) {
-        const sel = document.getElementById("sel_" + itemId);
-        const suggested = sel.dataset.suggested;
-        if (suggested) sel.value = suggested;
+    const APPROVE_URL_BASE = "{% url 'invoices:approve_item' 0 %}".replace("/0/", "/");
+    const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? "";
+
+    const TABLE = document.getElementById("queue-table");
+    const COLUMN_MENU = document.getElementById("column-menu");
+    const COLUMN_MENU_BUTTON = document.getElementById("column-menu-button");
+    const RESET_TABLE_BUTTON = document.getElementById("reset-table-button");
+    const STORAGE_KEYS = {
+            visibility: "reviewQueue.columnVisibility.v2",
+            widths: "reviewQueue.columnWidths.v3",
+    };
+    const TOGGLEABLE_COLS = ["invoice", "amount", "suggestion", "confidence"];
+    const DEFAULT_WIDTHS = {
+        desc: 400,
+        invoice: 124,
+        amount: 104,
+        suggestion: 210,
+        confidence: 132,
+        gl: 210,
+        actions: 96,
+    };
+    const MIN_WIDTHS = {
+        desc: 260,
+        invoice: 96,
+        amount: 84,
+        suggestion: 170,
+        confidence: 112,
+        gl: 170,
+        actions: 86,
+    };
+
+    function readStorage(key, fallback = {}) {
+        try {
+            const raw = localStorage.getItem(key);
+            return raw ? JSON.parse(raw) : fallback;
+        } catch {
+            return fallback;
+        }
     }
+
+    function writeStorage(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch {
+            // Ignore storage failures and keep the table usable for this session.
+        }
+    }
+
+    function getColumnCol(colId) {
+        return document.getElementById(`col-${colId}`);
+    }
+
+    function getColumnCells(colId) {
+        return TABLE ? TABLE.querySelectorAll(`[data-col-id="${colId}"]`) : [];
+    }
+
+    function isColumnVisible(colId) {
+        const col = getColumnCol(colId);
+        return col ? !col.classList.contains("is-hidden") : true;
+    }
+
+    function applyColumnWidth(colId, width) {
+        const col = getColumnCol(colId);
+        if (!col) return;
+        const clamped = Math.max(MIN_WIDTHS[colId] || 80, Math.round(width));
+        col.style.width = `${clamped}px`;
+    }
+
+    function applySavedWidths() {
+        const widths = readStorage(STORAGE_KEYS.widths);
+        Object.entries(DEFAULT_WIDTHS).forEach(([colId, defaultWidth]) => {
+            applyColumnWidth(colId, widths[colId] || defaultWidth);
+        });
+    }
+
+    function updateFirstVisibleCells() {
+        if (!TABLE) return;
+        TABLE.querySelectorAll("tbody tr").forEach(row => {
+            row.querySelectorAll("td").forEach(cell => cell.classList.remove("first-visible"));
+            const firstVisible = Array.from(row.querySelectorAll("td")).find(cell => !cell.classList.contains("is-hidden"));
+            if (firstVisible) firstVisible.classList.add("first-visible");
+        });
+    }
+
+    function applyColumnVisibility(colId, visible) {
+        const col = getColumnCol(colId);
+        if (col) {
+            col.classList.toggle("is-hidden", !visible);
+            col.style.width = visible
+                ? `${(readStorage(STORAGE_KEYS.widths)[colId] || DEFAULT_WIDTHS[colId])}px`
+                : "0px";
+        }
+
+        getColumnCells(colId).forEach(cell => {
+            cell.classList.toggle("is-hidden", !visible);
+        });
+
+        updateFirstVisibleCells();
+    }
+
+    function syncVisibilityControls() {
+        const visibility = readStorage(STORAGE_KEYS.visibility);
+        document.querySelectorAll("[data-col-toggle]").forEach(input => {
+            const colId = input.dataset.colToggle;
+            input.checked = visibility[colId] !== false;
+        });
+    }
+
+    function initColumnVisibility() {
+        const visibility = readStorage(STORAGE_KEYS.visibility);
+        TOGGLEABLE_COLS.forEach(colId => {
+            applyColumnVisibility(colId, visibility[colId] !== false);
+        });
+        syncVisibilityControls();
+    }
+
+    function openColumnMenu() {
+        if (!COLUMN_MENU || !COLUMN_MENU_BUTTON) return;
+        COLUMN_MENU.hidden = false;
+        COLUMN_MENU_BUTTON.setAttribute("aria-expanded", "true");
+    }
+
+    function closeColumnMenu() {
+        if (!COLUMN_MENU || !COLUMN_MENU_BUTTON) return;
+        COLUMN_MENU.hidden = true;
+        COLUMN_MENU_BUTTON.setAttribute("aria-expanded", "false");
+    }
+
+    function toggleColumnMenu() {
+        if (!COLUMN_MENU) return;
+        if (COLUMN_MENU.hidden) openColumnMenu();
+        else closeColumnMenu();
+    }
+
+    function resetTablePreferences() {
+        try {
+            localStorage.removeItem(STORAGE_KEYS.visibility);
+            localStorage.removeItem(STORAGE_KEYS.widths);
+        } catch {
+            // Ignore storage failures and still reapply defaults.
+        }
+        applySavedWidths();
+        initColumnVisibility();
+        closeColumnMenu();
+    }
+
+    let activeResize = null;
+
+    function startResize(event) {
+        const handle = event.currentTarget;
+        const colId = handle.dataset.resizeCol;
+        const col = getColumnCol(colId);
+        if (!col || !isColumnVisible(colId)) return;
+
+        activeResize = {
+            colId,
+            handle,
+            startX: event.clientX,
+            startWidth: col.getBoundingClientRect().width || DEFAULT_WIDTHS[colId] || 100,
+        };
+
+        handle.classList.add("dragging");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        event.preventDefault();
+    }
+
+    function handleResizeMove(event) {
+        if (!activeResize) return;
+        applyColumnWidth(activeResize.colId, activeResize.startWidth + (event.clientX - activeResize.startX));
+    }
+
+    function stopResize() {
+        if (!activeResize) return;
+        activeResize.handle.classList.remove("dragging");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+
+        const widths = readStorage(STORAGE_KEYS.widths);
+        const col = getColumnCol(activeResize.colId);
+        if (col) {
+            widths[activeResize.colId] = Math.round(col.getBoundingClientRect().width);
+            writeStorage(STORAGE_KEYS.widths, widths);
+        }
+
+        activeResize = null;
+    }
+
+    function acceptItem(itemId) {
+        const select = document.getElementById(`sel_${itemId}`);
+        const glCode = select?.value || select?.dataset.suggested;
+
+        if (!glCode) {
+            alert("No GL suggestion is available for this item. Please choose one from the dropdown.");
+            return;
+        }
+
+        const row = document.getElementById(`row-${itemId}`);
+        if (!row) return;
+        row.classList.add("removing");
+
+        fetch(`${APPROVE_URL_BASE}${itemId}/`, {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": CSRF,
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({ gl_code: glCode }).toString(),
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.ok) {
+                    row.classList.remove("removing");
+                    alert(`Could not approve: ${data.error || "unknown error"}`);
+                    return;
+                }
+
+                window.setTimeout(() => {
+                    row.remove();
+                    updateFirstVisibleCells();
+                    if (!TABLE.querySelector("tbody tr")) window.location.reload();
+                }, 220);
+
+                const badge = document.getElementById("pending-badge");
+                if (badge) {
+                    badge.textContent = `${data.pending} ${data.pending === 1 ? "item" : "items"} remaining`;
+                }
+            })
+            .catch(() => {
+                row.classList.remove("removing");
+                alert("Network error. Please try again.");
+            });
+    }
+
+    if (TABLE) {
+        applySavedWidths();
+        initColumnVisibility();
+
+        document.querySelectorAll("[data-col-toggle]").forEach(input => {
+            input.addEventListener("change", event => {
+                const colId = event.currentTarget.dataset.colToggle;
+                const visible = event.currentTarget.checked;
+                const visibility = readStorage(STORAGE_KEYS.visibility);
+                visibility[colId] = visible;
+                writeStorage(STORAGE_KEYS.visibility, visibility);
+                applyColumnVisibility(colId, visible);
+            });
+        });
+
+        document.querySelectorAll(".resize-handle").forEach(handle => {
+            handle.addEventListener("mousedown", startResize);
+        });
+
+        document.addEventListener("mousemove", handleResizeMove);
+        document.addEventListener("mouseup", stopResize);
+
+        document.addEventListener("click", event => {
+            const menuClicked = COLUMN_MENU?.contains(event.target);
+            const buttonClicked = COLUMN_MENU_BUTTON?.contains(event.target);
+            if (!menuClicked && !buttonClicked) closeColumnMenu();
+        });
+
+        document.addEventListener("keydown", event => {
+            if (event.key === "Escape") closeColumnMenu();
+        });
+
+        COLUMN_MENU_BUTTON?.addEventListener("click", toggleColumnMenu);
+        RESET_TABLE_BUTTON?.addEventListener("click", resetTablePreferences);
+    }
+
+    // ── GL searchable combobox (portal pattern) ────────────────────────────
+    // The dropdown is a single element appended to <body> and positioned with
+    // fixed coordinates. This escapes any overflow:hidden/auto ancestor,
+    // including .table-wrap, so the results always render above everything.
+
+    const GL_ACCOUNTS = [
+        {% for gl in gl_accounts %}{"code":"{{ gl.code|escapejs }}","desc":"{{ gl.description|escapejs }}"},
+        {% endfor %}
+    ];
+
+    // Single shared dropdown portal on <body>
+    const GL_PORTAL = document.createElement("div");
+    GL_PORTAL.className = "gl-dropdown";
+    GL_PORTAL.hidden = true;
+    document.body.appendChild(GL_PORTAL);
+    let portalOwner = null; // the GLCombobox instance currently using the portal
+
+    function glHighlight(text, query) {
+        if (!query) return text;
+        const idx = text.toLowerCase().indexOf(query.toLowerCase());
+        if (idx === -1) return text;
+        return text.slice(0, idx) + "<em>" + text.slice(idx, idx + query.length) + "</em>" + text.slice(idx + query.length);
+    }
+
+    class GLCombobox {
+        constructor(wrapper) {
+            this.input  = wrapper.querySelector(".gl-input");
+            this.hidden = wrapper.querySelector("input[type=hidden]");
+            this.active = -1;
+
+            const code = this.hidden.value;
+            if (code) {
+                const gl = GL_ACCOUNTS.find(g => g.code === code);
+                if (gl) this.input.value = `${gl.code} \u2013 ${gl.desc}`;
+            }
+
+            this.input.addEventListener("input",   () => this.search());
+            this.input.addEventListener("focus",   () => this.search());
+            this.input.addEventListener("keydown", e  => this.onKey(e));
+            this.input.addEventListener("blur",    () => setTimeout(() => { if (portalOwner === this) this.close(); }, 160));
+        }
+
+        search() {
+            portalOwner = this;
+            const q = this.input.value.trim().toLowerCase();
+            const results = GL_ACCOUNTS.filter(g =>
+                g.code.toLowerCase().includes(q) || g.desc.toLowerCase().includes(q)
+            ).slice(0, 60);
+
+            GL_PORTAL.innerHTML = results.length
+                ? results.map(gl =>
+                    `<div class="gl-option" data-code="${gl.code}">
+                        <span class="gl-opt-code">${glHighlight(gl.code, q)}</span>
+                        <span class="gl-opt-desc">${glHighlight(gl.desc, q)}</span>
+                    </div>`).join("")
+                : `<div class="gl-no-results">No matches for &ldquo;${this.input.value}&rdquo;</div>`;
+
+            GL_PORTAL.querySelectorAll(".gl-option").forEach(opt => {
+                opt.addEventListener("mousedown", e => { e.preventDefault(); this.select(opt.dataset.code); });
+            });
+
+            this.reposition();
+            GL_PORTAL.hidden = false;
+            this.active = -1;
+        }
+
+        reposition() {
+            const r = this.input.getBoundingClientRect();
+            GL_PORTAL.style.left  = r.left + "px";
+            GL_PORTAL.style.top   = (r.bottom + 3) + "px";
+            GL_PORTAL.style.width = r.width + "px";
+        }
+
+        select(code) {
+            const gl = GL_ACCOUNTS.find(g => g.code === code);
+            if (!gl) return;
+            this.hidden.value = code;
+            this.input.value  = `${gl.code} \u2013 ${gl.desc}`;
+            this.close();
+        }
+
+        close() {
+            GL_PORTAL.hidden = true;
+            portalOwner = null;
+            this.active = -1;
+        }
+
+        onKey(e) {
+            if (portalOwner !== this) return;
+            const opts = GL_PORTAL.querySelectorAll(".gl-option");
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                this.active = Math.min(this.active + 1, opts.length - 1);
+                this.highlight(opts);
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                this.active = Math.max(this.active - 1, 0);
+                this.highlight(opts);
+            } else if (e.key === "Enter" && this.active >= 0) {
+                e.preventDefault();
+                this.select(opts[this.active].dataset.code);
+            } else if (e.key === "Escape") {
+                this.close();
+            }
+        }
+
+        highlight(opts) {
+            opts.forEach((o, i) => o.classList.toggle("active", i === this.active));
+            if (this.active >= 0) opts[this.active].scrollIntoView({ block: "nearest" });
+        }
+    }
+
+    document.querySelectorAll(".gl-search").forEach(w => new GLCombobox(w));
+
+    // Close portal when clicking outside a combobox input
+    document.addEventListener("click", e => {
+        if (!e.target.closest(".gl-search") && !GL_PORTAL.contains(e.target)) {
+            GL_PORTAL.hidden = true;
+            portalOwner = null;
+        }
+    });
+
+    // Close portal on scroll (position would be stale)
+    document.querySelector(".table-wrap")?.addEventListener("scroll", () => {
+        GL_PORTAL.hidden = true;
+        portalOwner = null;
+    }, { passive: true });
 </script>
 
 </body>
