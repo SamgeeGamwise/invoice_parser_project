@@ -76,6 +76,25 @@ class ReferenceDataSyncServiceTests(TestCase):
         self.assertTrue(property_match.is_valid)
         self.assertEqual(property_match.normalized_code, "SSOH")
 
+    def test_sync_can_store_property_display_name_when_present(self) -> None:
+        class StubSpreadsheetReader:
+            def read_rows(self, path):
+                if "Property List.xlsx" in str(path):
+                    return [
+                        ["Website ID", "Yardi Code", "Display Name"],
+                        ["312", "bwoh", "Briarwood Oaks"],
+                    ]
+                return [
+                    ["scode", "sdesc"],
+                    ["6328", "OFFICE EQUIPMENT PURCHASES"],
+                ]
+
+        service = ReferenceDataSyncService(spreadsheet_reader=StubSpreadsheetReader())
+        service.sync_all(force=True)
+
+        prop = PropertyReference.objects.get(normalized_code="BWOH")
+        self.assertEqual(prop.display_name, "Briarwood Oaks")
+
 
 class LineItemGLClassifierServiceTests(TestCase):
     def setUp(self) -> None:
@@ -436,3 +455,70 @@ class DashboardViewTests(TestCase):
         self.assertContains(response, "Spend by GL Code")
         self.assertContains(response, "6734 &mdash; POOL / REC SUPPLIES", html=True)
         self.assertContains(response, "SSOH")
+
+
+class ReferenceDataViewTests(TestCase):
+    def setUp(self) -> None:
+        ReferenceDataSyncService().sync_all()
+
+    def test_reference_data_view_renders(self) -> None:
+        response = self.client.get(reverse("invoices:reference_data"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reference Data")
+        self.assertContains(response, "GL Accounts")
+        self.assertContains(response, "Property References")
+
+    def test_reference_data_view_can_create_gl_account(self) -> None:
+        response = self.client.post(
+            reverse("invoices:reference_data"),
+            {
+                "action": "save_gl",
+                "gl-code": "6999",
+                "gl-description": "TEST GL ACCOUNT",
+                "gl-in_review_range": "on",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(GLAccount.objects.filter(code="6999", description="TEST GL ACCOUNT").exists())
+
+    def test_reference_data_view_can_create_property_reference(self) -> None:
+        response = self.client.post(
+            reverse("invoices:reference_data"),
+            {
+                "action": "save_property",
+                "property-yardi_code": "test-prop",
+                "property-normalized_code": "test-prop",
+                "property-website_id": "web-1",
+                "property-display_name": "Test Property",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            PropertyReference.objects.filter(
+                normalized_code="TEST-PROP",
+                display_name="Test Property",
+            ).exists()
+        )
+
+
+class RuntimeReferenceDataGuardTests(TestCase):
+    def test_dashboard_post_shows_error_when_reference_data_not_loaded(self) -> None:
+        response = self.client.post(
+            reverse("invoices:dashboard"),
+            {
+                "invoice_pdf": SimpleUploadedFile(
+                    "invoice.pdf",
+                    b"pdf-bytes",
+                    content_type="application/pdf",
+                )
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reference data has not been imported into the database yet")

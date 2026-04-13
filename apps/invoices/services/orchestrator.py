@@ -53,7 +53,7 @@ class InvoiceProcessingService:
 
     def process(self, file_obj: BinaryIO) -> ParsedInvoice:
         """Parse a single uploaded PDF file."""
-        self.reference_data.sync_all()
+        self.reference_data.ensure_loaded()
         raw_text = self.pdf_reader.extract_text(file_obj)
         parsed = self.invoice_parser.parse(raw_text)
         parsed.source_file = SourceFileInfo(
@@ -80,7 +80,7 @@ class InvoiceProcessingService:
         progress_callback(current, total, filename, status) is called after each
         file finishes ('ok' or 'error'). Used by the streaming view for SSE.
         """
-        self.reference_data.sync_all()
+        self.reference_data.ensure_loaded()
 
         # Snapshot each file on the main thread before handing off.
         snapshots = []

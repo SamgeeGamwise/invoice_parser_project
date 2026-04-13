@@ -11,8 +11,8 @@ class GLAccountAdmin(admin.ModelAdmin):
 
 @admin.register(PropertyReference)
 class PropertyReferenceAdmin(admin.ModelAdmin):
-    list_display = ("normalized_code", "website_id", "yardi_code")
-    search_fields = ("normalized_code", "yardi_code", "website_id")
+    list_display = ("normalized_code", "display_name", "website_id", "yardi_code")
+    search_fields = ("normalized_code", "yardi_code", "website_id", "display_name")
 
 
 class InvoiceLineItemInline(admin.TabularInline):

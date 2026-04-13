@@ -85,6 +85,7 @@
     <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
     <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
     <a href="{% url 'invoices:reports' %}">Reports</a>
+    <a href="{% url 'invoices:reference_data' %}">Reference Data</a>
     <a href="{% url 'invoices:property_audit' %}" class="active">Property Audit</a>
 </nav>
 
@@ -168,6 +169,7 @@
                     <th>Normalized code</th>
                     <th>Yardi code</th>
                     <th>Website ID</th>
+                    <th>Name</th>
                     <th>Invoices matched</th>
                 </tr>
             </thead>
@@ -184,6 +186,13 @@
                         {% endif %}
                     </td>
                     <td>
+                        {% if ref.display_name %}
+                        {{ ref.display_name }}
+                        {% else %}
+                        <span style="color:var(--muted);">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
                         {% if ref.invoice_count %}
                         <span class="count">{{ ref.invoice_count }}</span>
                         {% else %}
@@ -192,7 +201,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="4" style="color:var(--muted); text-align:center; padding:2rem;">No property references loaded.</td></tr>
+                <tr><td colspan="5" style="color:var(--muted); text-align:center; padding:2rem;">No property references loaded.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

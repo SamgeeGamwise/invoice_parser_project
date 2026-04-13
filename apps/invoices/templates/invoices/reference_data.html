@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invoice Parser &mdash; Reference Data</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
+            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
+            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
+        }
+        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+        nav {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
+        }
+        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
+        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+        nav a:hover, nav a.active { color: var(--blue); }
+        main { max-width: 1320px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
+        h1 { font-size: 1.4rem; margin: 0 0 0.35rem; }
+        h2 { font-size: 1.05rem; margin: 0 0 0.9rem; }
+        p { margin: 0.35rem 0; color: var(--muted); font-size: 0.92rem; }
+        .flash-stack { display: grid; gap: 0.8rem; margin-bottom: 1rem; }
+        .flash { padding: 0.9rem 1rem; border-radius: 12px; border: 1px solid var(--border); background: #fff; font-size: 0.88rem; }
+        .flash-success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+        .flash-error { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+        .stats { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
+        .pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.8rem; border-radius: 999px; font-size: 0.82rem; font-weight: 700; }
+        .pill-blue { background: #eff6ff; color: var(--blue); }
+        .pill-green { background: #f0fdf4; color: var(--green); }
+        .pill-amber { background: #fffbeb; color: var(--amber); }
+        .actions { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
+        .grid { display: grid; grid-template-columns: 360px 1fr; gap: 1.25rem; align-items: start; }
+        @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+        label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.3rem; }
+        input[type="text"], textarea {
+            width: 100%; font: inherit; font-size: 0.88rem; padding: 0.55rem 0.65rem;
+            border: 1px solid var(--border); border-radius: 8px; background: #fff;
+        }
+        input[type="checkbox"] { accent-color: var(--blue); }
+        .field { margin-bottom: 0.85rem; }
+        .checkbox-row { display: flex; align-items: center; gap: 0.45rem; margin: 0.65rem 0 1rem; }
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
+            padding: 0.55rem 1rem; border-radius: 8px; font: inherit; font-size: 0.88rem;
+            font-weight: 700; cursor: pointer; text-decoration: none; border: 1px solid transparent;
+        }
+        .btn-primary { background: var(--blue); color: #fff; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-outline { background: transparent; border-color: var(--blue); color: var(--blue); }
+        .btn-outline:hover { background: #eff6ff; }
+        .btn-danger { background: #fff1f2; border-color: #fecdd3; color: #be123c; }
+        .btn-danger:hover { background: #ffe4e6; }
+        .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+        .helper { font-size: 0.8rem; color: var(--muted); }
+        .errorlist { margin: 0.4rem 0 0; padding-left: 1rem; color: var(--red); font-size: 0.82rem; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+        th { text-align: left; padding: 0.55rem 0.6rem; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--border); white-space: nowrap; }
+        td { padding: 0.7rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        .code { font-family: monospace; font-size: 0.84rem; }
+        .table-actions { display: flex; gap: 0.45rem; }
+        .empty { text-align: center; color: var(--muted); padding: 1.5rem 0.5rem; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
+    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
+    <a href="{% url 'invoices:reports' %}">Reports</a>
+    <a href="{% url 'invoices:reference_data' %}" class="active">Reference Data</a>
+    <a href="{% url 'invoices:property_audit' %}">Property Audit</a>
+</nav>
+
+<main>
+    {% if messages %}
+    <div class="flash-stack">
+        {% for message in messages %}
+        <div class="flash flash-{{ message.tags|default:'success' }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <section class="card">
+        <h1>Reference Data</h1>
+        <p>GL accounts and property references now live in the database. The Excel files are only used when you explicitly import them.</p>
+        <div class="stats">
+            <span class="pill pill-blue">{{ gl_accounts|length }} GL account{{ gl_accounts|length|pluralize }}</span>
+            <span class="pill pill-green">{{ property_references|length }} property reference{{ property_references|length|pluralize }}</span>
+            <span class="pill pill-amber">{{ reference_file_count }} import source file{{ reference_file_count|pluralize }}</span>
+        </div>
+        <form method="post" class="actions">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="import_reference_data">
+            <button type="submit" class="btn btn-primary">Import From Excel Files</button>
+            <span class="helper">This refreshes DB records from `data/reference/*.xlsx` when you choose to run it.</span>
+        </form>
+    </section>
+
+    <section class="grid">
+        <div class="card">
+            <h2>{% if gl_edit_id %}Edit GL Account{% else %}Add GL Account{% endif %}</h2>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_gl">
+                {% if gl_edit_id %}<input type="hidden" name="gl_id" value="{{ gl_edit_id }}">{% endif %}
+                <div class="field">
+                    <label for="{{ gl_form.code.id_for_label }}">Code</label>
+                    {{ gl_form.code }}
+                    {{ gl_form.code.errors }}
+                </div>
+                <div class="field">
+                    <label for="{{ gl_form.description.id_for_label }}">Description</label>
+                    {{ gl_form.description }}
+                    {{ gl_form.description.errors }}
+                </div>
+                <label class="checkbox-row" for="{{ gl_form.in_review_range.id_for_label }}">
+                    {{ gl_form.in_review_range }}
+                    In review range
+                </label>
+                {{ gl_form.non_field_errors }}
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary">Save GL Account</button>
+                    {% if gl_edit_id %}
+                    <a href="{% url 'invoices:reference_data' %}" class="btn btn-outline">Cancel</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>GL Accounts</h2>
+            {% if gl_accounts %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Description</th>
+                        <th>Review Range</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for account in gl_accounts %}
+                    <tr>
+                        <td class="code">{{ account.code }}</td>
+                        <td>{{ account.description }}</td>
+                        <td>{% if account.in_review_range %}Yes{% else %}No{% endif %}</td>
+                        <td>
+                            <div class="table-actions">
+                                <a class="btn btn-outline btn-sm" href="?gl_edit={{ account.id }}">Edit</a>
+                                <form method="post" onsubmit="return confirm('Delete GL account {{ account.code }}?');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="delete_gl">
+                                    <input type="hidden" name="gl_id" value="{{ account.id }}">
+                                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No GL accounts are stored in the database yet.</div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="grid">
+        <div class="card">
+            <h2>{% if property_edit_id %}Edit Property Reference{% else %}Add Property Reference{% endif %}</h2>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_property">
+                {% if property_edit_id %}<input type="hidden" name="property_id" value="{{ property_edit_id }}">{% endif %}
+                <div class="field">
+                    <label for="{{ property_form.yardi_code.id_for_label }}">Yardi Code</label>
+                    {{ property_form.yardi_code }}
+                    {{ property_form.yardi_code.errors }}
+                </div>
+                <div class="field">
+                    <label for="{{ property_form.normalized_code.id_for_label }}">Normalized Code</label>
+                    {{ property_form.normalized_code }}
+                    {{ property_form.normalized_code.errors }}
+                </div>
+                <div class="field">
+                    <label for="{{ property_form.website_id.id_for_label }}">Website ID</label>
+                    {{ property_form.website_id }}
+                    {{ property_form.website_id.errors }}
+                </div>
+                <div class="field">
+                    <label for="{{ property_form.display_name.id_for_label }}">Display Name</label>
+                    {{ property_form.display_name }}
+                    {{ property_form.display_name.errors }}
+                </div>
+                {{ property_form.non_field_errors }}
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary">Save Property Reference</button>
+                    {% if property_edit_id %}
+                    <a href="{% url 'invoices:reference_data' %}" class="btn btn-outline">Cancel</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Property References</h2>
+            {% if property_references %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Normalized</th>
+                        <th>Yardi Code</th>
+                        <th>Website ID</th>
+                        <th>Name</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for reference in property_references %}
+                    <tr>
+                        <td class="code">{{ reference.normalized_code }}</td>
+                        <td class="code">{{ reference.yardi_code }}</td>
+                        <td>{% if reference.website_id %}<span class="code">{{ reference.website_id }}</span>{% else %}&mdash;{% endif %}</td>
+                        <td>{% if reference.display_name %}{{ reference.display_name }}{% else %}&mdash;{% endif %}</td>
+                        <td>
+                            <div class="table-actions">
+                                <a class="btn btn-outline btn-sm" href="?property_edit={{ reference.id }}">Edit</a>
+                                <form method="post" onsubmit="return confirm('Delete property reference {{ reference.normalized_code }}?');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="delete_property">
+                                    <input type="hidden" name="property_id" value="{{ reference.id }}">
+                                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No property references are stored in the database yet.</div>
+            {% endif %}
+        </div>
+    </section>
+</main>
+
+</body>
+</html>

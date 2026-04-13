@@ -6,6 +6,7 @@ from .views import (
     clear_data_view,
     dashboard_view,
     invoice_detail_view,
+    reference_data_view,
     property_audit_view,
     reports_view,
     results_view,
@@ -24,6 +25,7 @@ urlpatterns = [
     path("results/", results_view, name="results"),
     path("review/", review_queue_view, name="review_queue"),
     path("review/approve/<int:item_id>/", approve_item_view, name="approve_item"),
+    path("reference-data/", reference_data_view, name="reference_data"),
     path("property-audit/", property_audit_view, name="property_audit"),
     path("clear-data/", clear_data_view, name="clear_data"),
 ]

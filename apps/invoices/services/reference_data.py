@@ -26,6 +26,13 @@ class ReferenceDataSyncService:
             self.sync_gl_accounts(force=force)
             self.sync_property_references(force=force)
 
+    def ensure_loaded(self) -> None:
+        if not GLAccount.objects.exists() or not PropertyReference.objects.exists():
+            raise RuntimeError(
+                "Reference data has not been imported into the database yet. "
+                "Import GL accounts and property references before processing invoices."
+            )
+
     def sync_gl_accounts(self, force: bool = False) -> None:
         if not force and GLAccount.objects.exists():
             return
@@ -60,12 +67,15 @@ class ReferenceDataSyncService:
             website_id, yardi_code = row[0], row[1]
             if not yardi_code:
                 continue
+            extras = [value.strip() for value in row[2:] if value and value.strip()]
+            display_name = extras[0] if extras else ""
             normalized_code = self.normalize_property_code(yardi_code)
             PropertyReference.objects.update_or_create(
                 yardi_code=yardi_code.strip(),
                 defaults={
                     "website_id": website_id.strip(),
                     "normalized_code": normalized_code,
+                    "display_name": display_name,
                 },
             )
 

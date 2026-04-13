@@ -167,6 +167,7 @@
     <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
     <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
     <a href="{% url 'invoices:reports' %}">Reports</a>
+    <a href="{% url 'invoices:reference_data' %}">Reference Data</a>
     <a href="{% url 'invoices:property_audit' %}">Property Audit</a>
     {% if debug %}
     <a href="{% url 'invoices:clear_data' %}" style="margin-left: auto; color: #dc2626; font-size: 0.85rem;">Clear Data</a>
@@ -222,6 +223,7 @@
 
                 {% if single_form.errors %}
                 <ul class="error-list">
+                    {% for error in single_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
                     {% for error in single_form.invoice_pdf.errors %}<li>{{ error }}</li>{% endfor %}
                 </ul>
                 {% endif %}
@@ -245,9 +247,12 @@
             <h2>Bulk Upload</h2>
             <p>Have a folder of invoices? Upload up to {{ max_files }} PDFs at once. Results are saved to:</p>
             <code style="font-size: 0.82rem; color: var(--muted);">{{ output_path }}</code>
-            <p style="margin-top: 0.75rem;">Reference files loaded: {{ reference_files|length }}</p>
+            <p style="margin-top: 0.75rem;">Reference data in DB: {{ gl_account_count }} GL account{{ gl_account_count|pluralize }}, {{ property_reference_count }} property reference{{ property_reference_count|pluralize }}</p>
             <a class="btn btn-outline" href="{% url 'invoices:bulk_upload' %}" style="margin-top: 1rem; display: inline-block;">
                 Open Bulk Upload &rarr;
+            </a>
+            <a class="btn btn-outline" href="{% url 'invoices:reference_data' %}" style="margin-top: 1rem; display: inline-block; margin-left: 0.5rem;">
+                Manage Reference Data &rarr;
             </a>
         </article>
 

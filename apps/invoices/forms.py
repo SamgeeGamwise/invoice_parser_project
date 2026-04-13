@@ -1,6 +1,8 @@
 from django.conf import settings
 from django import forms
 
+from .models import GLAccount, PropertyReference
+
 
 class InvoiceUploadForm(forms.Form):
     invoice_pdf = forms.FileField(
@@ -74,3 +76,34 @@ class BulkInvoiceUploadForm(forms.Form):
             )
 
         return uploaded_files
+
+
+class GLAccountForm(forms.ModelForm):
+    class Meta:
+        model = GLAccount
+        fields = ["code", "description", "in_review_range"]
+        widgets = {
+            "code": forms.TextInput(attrs={"placeholder": "6328"}),
+            "description": forms.TextInput(attrs={"placeholder": "OFFICE EQUIPMENT PURCHASES"}),
+        }
+
+
+class PropertyReferenceForm(forms.ModelForm):
+    class Meta:
+        model = PropertyReference
+        fields = ["yardi_code", "normalized_code", "website_id", "display_name"]
+        widgets = {
+            "yardi_code": forms.TextInput(attrs={"placeholder": "SSOH"}),
+            "normalized_code": forms.TextInput(attrs={"placeholder": "SSOH"}),
+            "website_id": forms.TextInput(attrs={"placeholder": "12345"}),
+            "display_name": forms.TextInput(attrs={"placeholder": "Sunset Station"}),
+        }
+
+    def clean_normalized_code(self):
+        return (self.cleaned_data.get("normalized_code") or "").strip().upper()
+
+    def clean_yardi_code(self):
+        return (self.cleaned_data.get("yardi_code") or "").strip()
+
+    def clean_display_name(self):
+        return (self.cleaned_data.get("display_name") or "").strip()

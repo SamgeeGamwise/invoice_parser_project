@@ -12,9 +12,10 @@ from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .forms import BulkInvoiceUploadForm, InvoiceUploadForm
+from .forms import BulkInvoiceUploadForm, GLAccountForm, InvoiceUploadForm, PropertyReferenceForm
 from .models import GLAccount, Invoice, InvoiceLineItem, PropertyReference
 from .services.data_catalog import ProjectDataCatalogService
+from .services.reference_data import ReferenceDataSyncService
 from .services.orchestrator import InvoiceProcessingService
 from .services.output_writer import InvoiceOutputWriterService
 from .services.reporting import ReportingService
@@ -47,7 +48,8 @@ def _dashboard_context(single_form=None, bulk_form=None) -> dict:
         "review_pct": review_pct,
         "recent_invoices": Invoice.objects.prefetch_related("line_items")[:10],
         "sample_invoice_count": len(data_catalog.list_sample_invoices()),
-        "reference_files": data_catalog.list_reference_files(),
+        "gl_account_count": GLAccount.objects.count(),
+        "property_reference_count": PropertyReference.objects.count(),
         "output_path": _display_path(settings.PARSED_INVOICES_JSON),
         "max_files": settings.BULK_UPLOAD_MAX_FILES,
     }
@@ -60,7 +62,11 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         if form.is_valid():
             processor = InvoiceProcessingService()
             repository = InvoiceRepositoryService()
-            parsed = processor.process(form.cleaned_data["invoice_pdf"])
+            try:
+                parsed = processor.process(form.cleaned_data["invoice_pdf"])
+            except RuntimeError as exc:
+                form.add_error(None, str(exc))
+                return render(request, "invoices/dashboard.html", _dashboard_context(single_form=form))
             saved = repository.save_parsed_invoices([parsed])[0]
             return redirect("invoices:invoice_detail", invoice_id=saved.id)
         return render(request, "invoices/dashboard.html", _dashboard_context(single_form=form))
@@ -74,6 +80,14 @@ def bulk_upload_view(request: HttpRequest) -> HttpResponse:
         form = BulkInvoiceUploadForm(request.POST, request.FILES)
         if form.is_valid():
             files = form.cleaned_data["invoice_pdfs"]
+            try:
+                InvoiceProcessingService().reference_data.ensure_loaded()
+            except RuntimeError as exc:
+                form.add_error(None, str(exc))
+                return render(request, "invoices/bulk_upload.html", {
+                    "form": form,
+                    "max_files": settings.BULK_UPLOAD_MAX_FILES,
+                })
             progress_q: queue.Queue = queue.Queue()
 
             def run():
@@ -411,6 +425,83 @@ def approve_item_view(request: HttpRequest, item_id: int) -> JsonResponse:
     ).count()
 
     return JsonResponse({"ok": True, "pending": pending})
+
+
+def reference_data_view(request: HttpRequest) -> HttpResponse:
+    """CRUD UI for DB-backed GL accounts and property references."""
+    gl_edit_id = request.GET.get("gl_edit")
+    property_edit_id = request.GET.get("property_edit")
+
+    gl_instance = GLAccount.objects.filter(pk=gl_edit_id).first() if gl_edit_id else None
+    property_instance = (
+        PropertyReference.objects.filter(pk=property_edit_id).first()
+        if property_edit_id else None
+    )
+
+    gl_form = GLAccountForm(instance=gl_instance, prefix="gl")
+    property_form = PropertyReferenceForm(instance=property_instance, prefix="property")
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        reference_data = ReferenceDataSyncService()
+
+        if action == "import_reference_data":
+            before_gl = GLAccount.objects.count()
+            before_prop = PropertyReference.objects.count()
+            reference_data.sync_all(force=True)
+            messages.success(
+                request,
+                (
+                    f"Imported reference data from Excel. "
+                    f"GL accounts: {before_gl} -> {GLAccount.objects.count()}, "
+                    f"property references: {before_prop} -> {PropertyReference.objects.count()}."
+                ),
+            )
+            return redirect("invoices:reference_data")
+
+        if action == "save_gl":
+            target = GLAccount.objects.filter(pk=request.POST.get("gl_id")).first()
+            gl_form = GLAccountForm(request.POST, instance=target, prefix="gl")
+            if gl_form.is_valid():
+                record = gl_form.save()
+                messages.success(request, f"Saved GL account {record.code}.")
+                return redirect("invoices:reference_data")
+            gl_instance = target
+
+        elif action == "delete_gl":
+            target = GLAccount.objects.filter(pk=request.POST.get("gl_id")).first()
+            if target:
+                code = target.code
+                target.delete()
+                messages.success(request, f"Deleted GL account {code}.")
+            return redirect("invoices:reference_data")
+
+        elif action == "save_property":
+            target = PropertyReference.objects.filter(pk=request.POST.get("property_id")).first()
+            property_form = PropertyReferenceForm(request.POST, instance=target, prefix="property")
+            if property_form.is_valid():
+                record = property_form.save()
+                messages.success(request, f"Saved property reference {record.normalized_code}.")
+                return redirect("invoices:reference_data")
+            property_instance = target
+
+        elif action == "delete_property":
+            target = PropertyReference.objects.filter(pk=request.POST.get("property_id")).first()
+            if target:
+                code = target.normalized_code
+                target.delete()
+                messages.success(request, f"Deleted property reference {code}.")
+            return redirect("invoices:reference_data")
+
+    return render(request, "invoices/reference_data.html", {
+        "gl_accounts": GLAccount.objects.order_by("code"),
+        "property_references": PropertyReference.objects.order_by("normalized_code"),
+        "gl_form": gl_form,
+        "property_form": property_form,
+        "gl_edit_id": int(gl_instance.id) if gl_instance else None,
+        "property_edit_id": int(property_instance.id) if property_instance else None,
+        "reference_file_count": len(ProjectDataCatalogService().list_reference_files()),
+    })
 
 
 def property_audit_view(request: HttpRequest) -> HttpResponse:
