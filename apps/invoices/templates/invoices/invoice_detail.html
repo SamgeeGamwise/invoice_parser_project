@@ -28,6 +28,19 @@
         h2 { font-size: 1.05rem; margin: 0 0 1rem; }
         p  { margin: 0.35rem 0; color: var(--muted); font-size: 0.9rem; }
 
+        .flash-stack { display: grid; gap: 0.8rem; margin-bottom: 1rem; }
+        .flash {
+            padding: 0.9rem 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: #fff;
+            font-size: 0.88rem;
+            line-height: 1.45;
+        }
+        .flash.flash-success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+        .flash.flash-error { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+        .flash.flash-info { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+
         /* Meta grid */
         .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
         .meta-item { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 0.9rem; }
@@ -94,15 +107,29 @@
     <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
     <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
     <a href="{% url 'invoices:reports' %}">Reports</a>
+    <a href="{% url 'invoices:property_audit' %}">Property Audit</a>
 </nav>
 
 <main>
+    {% if messages %}
+    <div class="flash-stack">
+        {% for message in messages %}
+        <div class="flash flash-{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     <!-- Invoice header -->
     <section class="card">
         <p style="margin-bottom: 0.75rem;"><a href="{% url 'invoices:dashboard' %}">&larr; Back to dashboard</a></p>
         <h1>Invoice {{ invoice.invoice_number }}</h1>
         <p>Review the GL code suggestion for each line item below. Approve or override as needed, then save.</p>
+
+        {% if not invoice.has_valid_property %}
+        <div class="flash flash-error" style="margin-top: 1rem;">
+            This invoice is flagged because its property code is missing or not validated. Approvals require both a GL and a validated property code.
+        </div>
+        {% endif %}
 
         <div class="meta">
             <div class="meta-item">
@@ -116,8 +143,12 @@
             <div class="meta-item">
                 <div class="meta-label">Property</div>
                 <div class="meta-value">
-                    {{ invoice.property_code_normalized|default:"Unknown" }}
-                    {% if invoice.property_reference %}<span class="badge badge-green" style="vertical-align: middle;">validated</span>{% endif %}
+                    {{ invoice.property_status_label }}
+                    {% if invoice.property_reference %}
+                    <span class="badge badge-green" style="vertical-align: middle;">validated</span>
+                    {% else %}
+                    <span class="badge badge-amber" style="vertical-align: middle;">flagged</span>
+                    {% endif %}
                 </div>
             </div>
             <div class="meta-item">
@@ -234,9 +265,15 @@
                 </tbody>
             </table>
             <div style="margin-top: 1.25rem; display: flex; align-items: center; gap: 1rem;">
-                <button class="btn btn-primary" type="submit">Save Review Decisions</button>
+                <button class="btn btn-primary" type="submit" {% if not invoice.has_valid_property %}disabled title="Approvals require a validated property code."{% endif %}>
+                    Save Review Decisions
+                </button>
                 <span style="font-size: 0.85rem; color: var(--muted);">
+                    {% if invoice.has_valid_property %}
                     Green rows are already approved.
+                    {% else %}
+                    Resolve the invoice property first, then approvals can be saved safely.
+                    {% endif %}
                 </span>
             </div>
         </form>

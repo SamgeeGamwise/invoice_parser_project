@@ -426,10 +426,11 @@ def property_audit_view(request: HttpRequest) -> HttpResponse:
         .order_by("property_code_raw", "property_code_normalized")
     )
 
-    # Group by raw code
+    # Group raw codes case-insensitively so "ssoh" and "SSOH" collapse together.
     raw_groups: dict = defaultdict(list)
     for row in combos:
-        raw_groups[row["property_code_raw"]].append(row)
+        raw_key = (row["property_code_raw"] or "").strip().upper()
+        raw_groups[raw_key].append(row)
 
     invoice_groups = []
     for raw, entries in sorted(raw_groups.items(), key=lambda x: (x[0] or "")):

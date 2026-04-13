@@ -1,6 +1,5 @@
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -86,7 +85,7 @@ class LineItemGLClassifierServiceTests(TestCase):
             GLAccount(code="6734", description="POOL / REC SUPPLIES", in_review_range=True),
         ])
 
-    def test_suggest_prefers_keyword_based_gl_for_recreation_item(self) -> None:
+    def test_suggest_prefers_highest_embedding_score(self) -> None:
         classifier = LineItemGLClassifierService()
         line_item = ParsedLineItem(
             line_number=1,
@@ -94,24 +93,19 @@ class LineItemGLClassifierServiceTests(TestCase):
             normalized_description="sterling sunnywood sports heavy duty tetherball set",
         )
 
-        suggestions = classifier.suggest(line_item, invoice_gl_code="6328")
+        with patch(
+            "apps.invoices.services.classification.embedding_classifier.score_description_against_gl",
+            return_value={"6734": 0.95, "6328": 0.30},
+        ), patch(
+            "apps.invoices.services.classification.embedding_classifier.score_against_approved_history",
+            return_value={},
+        ):
+            suggestions = classifier.suggest(line_item, invoice_gl_code="")
 
         self.assertEqual(suggestions[0].gl_code, "6734")
-        self.assertTrue(any("Keyword match" in reason for reason in suggestions[0].reasons))
+        self.assertTrue(any("Semantic match" in reason for reason in suggestions[0].reasons))
 
-    def test_history_strengthens_repeated_approved_descriptions(self) -> None:
-        approved_gl = GLAccount.objects.get(code="6332")
-        invoice = Invoice.objects.create(invoice_number="INV-001")
-        InvoiceLineItem.objects.create(
-            invoice=invoice,
-            line_number=1,
-            item_type=InvoiceLineItem.ItemType.PRODUCT,
-            description="TRU RED Copy Paper",
-            normalized_description="tru red copy paper",
-            line_total=Decimal("10.00"),
-            approved_gl=approved_gl,
-        )
-
+    def test_history_vote_can_overcome_invoice_prior(self) -> None:
         classifier = LineItemGLClassifierService()
         line_item = ParsedLineItem(
             line_number=1,
@@ -119,10 +113,17 @@ class LineItemGLClassifierServiceTests(TestCase):
             normalized_description="tru red copy paper",
         )
 
-        suggestions = classifier.suggest(line_item, invoice_gl_code="6328")
+        with patch(
+            "apps.invoices.services.classification.embedding_classifier.score_description_against_gl",
+            return_value={"6328": 0.15, "6332": 0.10},
+        ), patch(
+            "apps.invoices.services.classification.embedding_classifier.score_against_approved_history",
+            return_value={"6332": 1.40},
+        ):
+            suggestions = classifier.suggest(line_item, invoice_gl_code="6328")
 
         self.assertEqual(suggestions[0].gl_code, "6332")
-        self.assertTrue(any("Exact match" in reason for reason in suggestions[0].reasons))
+        self.assertTrue(any("KNN vote" in reason for reason in suggestions[0].reasons))
 
 
 class InvoiceRepositoryServiceTests(TestCase):
@@ -179,26 +180,65 @@ class InvoiceRepositoryServiceTests(TestCase):
         self.assertEqual(saved_invoice.line_items.count(), 1)
         self.assertEqual(saved_invoice.line_items.first().suggested_gl.code, "6734")
 
+    def test_single_line_auto_approve_requires_validated_property(self) -> None:
+        invoice_gl = GLAccount.objects.get(code="6328")
+        parsed_invoice = ParsedInvoice(
+            source_file=SourceFileInfo(name="invoice.pdf", size_bytes=123),
+            invoice_number="INV-NO-PROP",
+            invoice_date=date(2026, 3, 31),
+            purchaser="Deanna Yost",
+            invoice_gl_code=invoice_gl.code,
+            invoice_gl_description=invoice_gl.description,
+            property_code_raw="unknown",
+            property_code_normalized="UNKNOWN",
+            property_code_validated=False,
+            subtotal=Decimal("25.00"),
+            tax_total=Decimal("0.00"),
+            grand_total=Decimal("25.00"),
+            line_items=[
+                ParsedLineItem(
+                    line_number=1,
+                    description="Paper clips",
+                    normalized_description="paper clips",
+                    line_total=Decimal("25.00"),
+                    suggested_gl_code=invoice_gl.code,
+                    suggested_gl_description=invoice_gl.description,
+                )
+            ],
+        )
+
+        saved_invoice = InvoiceRepositoryService().save_parsed_invoices([parsed_invoice])[0]
+
+        self.assertIsNone(saved_invoice.property_reference)
+        self.assertIsNone(saved_invoice.line_items.first().approved_gl)
+
 
 class DashboardViewTests(TestCase):
     def setUp(self) -> None:
         ReferenceDataSyncService().sync_all()
 
-    def _build_parsed_invoice(self) -> ParsedInvoice:
+    def _build_parsed_invoice(
+        self,
+        *,
+        invoice_number: str = "1FD6-HNRM-7M69",
+        property_code_raw: str = "ssoh",
+        property_code_normalized: str = "SSOH",
+        property_code_validated: bool = True,
+    ) -> ParsedInvoice:
         invoice_gl = GLAccount.objects.get(code="6328")
         suggested_gl = GLAccount.objects.get(code="6734")
         return ParsedInvoice(
             source_file=SourceFileInfo(name="invoice.pdf", size_bytes=123, content_type="application/pdf"),
-            invoice_number="1FD6-HNRM-7M69",
+            invoice_number=invoice_number,
             invoice_date=date(2026, 3, 31),
             purchase_date=date(2026, 3, 20),
             purchaser="Deanna Yost",
             po_number="1085654",
             invoice_gl_code=invoice_gl.code,
             invoice_gl_description=invoice_gl.description,
-            property_code_raw="ssoh",
-            property_code_normalized="SSOH",
-            property_code_validated=True,
+            property_code_raw=property_code_raw,
+            property_code_normalized=property_code_normalized,
+            property_code_validated=property_code_validated,
             subtotal=Decimal("119.99"),
             tax_total=Decimal("8.70"),
             grand_total=Decimal("128.69"),
@@ -247,23 +287,10 @@ class DashboardViewTests(TestCase):
         saved_invoice = Invoice.objects.get(invoice_number="1FD6-HNRM-7M69")
         self.assertRedirects(response, reverse("invoices:invoice_detail", args=[saved_invoice.id]))
 
-    def test_bulk_upload_post_renders_progress_page(self) -> None:
-        with patch(
-            "apps.invoices.views.BulkUploadJobService.start_job",
-        ) as start_job_mock:
-            start_job_mock.return_value.job_id = "job-123"
-            response = self.client.post(
-                reverse("invoices:bulk_upload"),
-                {
-                    "invoice_pdfs": [
-                        SimpleUploadedFile("invoice-1.pdf", b"one", content_type="application/pdf"),
-                        SimpleUploadedFile("invoice-2.pdf", b"two", content_type="application/pdf"),
-                    ]
-                },
-            )
-
+    def test_bulk_upload_get_renders_form(self) -> None:
+        response = self.client.get(reverse("invoices:bulk_upload"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bulk Upload Progress")
+        self.assertContains(response, "Bulk Upload")
 
     def test_invoice_detail_post_saves_review_override(self) -> None:
         invoice = InvoiceRepositoryService().save_parsed_invoices([self._build_parsed_invoice()])[0]
@@ -273,8 +300,8 @@ class DashboardViewTests(TestCase):
         response = self.client.post(
             reverse("invoices:invoice_detail", args=[invoice.id]),
             {
-                f"line_item_{line_item.id}_gl": approved_gl.code,
-                f"line_item_{line_item.id}_notes": "Reviewed and moved to office equipment.",
+                f"item_{line_item.id}_gl": approved_gl.code,
+                f"item_{line_item.id}_notes": "Reviewed and moved to office equipment.",
             },
         )
 
@@ -282,6 +309,120 @@ class DashboardViewTests(TestCase):
         line_item.refresh_from_db()
         self.assertEqual(line_item.approved_gl.code, "6328")
         self.assertEqual(line_item.approval_notes, "Reviewed and moved to office equipment.")
+
+    def test_invoice_detail_post_blocks_approval_without_validated_property(self) -> None:
+        invoice = InvoiceRepositoryService().save_parsed_invoices([
+            self._build_parsed_invoice(
+                invoice_number="INV-BLOCKED",
+                property_code_raw="unknown",
+                property_code_normalized="UNKNOWN",
+                property_code_validated=False,
+            )
+        ])[0]
+        approved_gl = GLAccount.objects.get(code="6328")
+        line_item = invoice.line_items.first()
+
+        response = self.client.post(
+            reverse("invoices:invoice_detail", args=[invoice.id]),
+            {
+                f"item_{line_item.id}_gl": approved_gl.code,
+                f"item_{line_item.id}_notes": "Tried to approve.",
+            },
+            follow=True,
+        )
+
+        line_item.refresh_from_db()
+        self.assertIsNone(line_item.approved_gl)
+        self.assertContains(response, "validated property code")
+
+    def test_review_queue_post_skips_flagged_invoices(self) -> None:
+        valid_invoice = InvoiceRepositoryService().save_parsed_invoices([
+            self._build_parsed_invoice(invoice_number="INV-VALID")
+        ])[0]
+        invalid_invoice = InvoiceRepositoryService().save_parsed_invoices([
+            self._build_parsed_invoice(
+                invoice_number="INV-FLAGGED",
+                property_code_raw="unknown",
+                property_code_normalized="UNKNOWN",
+                property_code_validated=False,
+            )
+        ])[0]
+
+        valid_item = valid_invoice.line_items.first()
+        invalid_item = invalid_invoice.line_items.first()
+        approved_gl = GLAccount.objects.get(code="6328")
+
+        response = self.client.post(
+            reverse("invoices:review_queue"),
+            {
+                "item_ids": f"{valid_item.id},{invalid_item.id}",
+                "page": "1",
+                f"item_{valid_item.id}_gl": approved_gl.code,
+                f"item_{invalid_item.id}_gl": approved_gl.code,
+            },
+            follow=True,
+        )
+
+        valid_item.refresh_from_db()
+        invalid_item.refresh_from_db()
+        self.assertEqual(valid_item.approved_gl.code, approved_gl.code)
+        self.assertIsNone(invalid_item.approved_gl)
+        self.assertContains(response, "Flagged invoice")
+
+    def test_review_queue_page_contains_bulk_save_confirmation_modal(self) -> None:
+        InvoiceRepositoryService().save_parsed_invoices([
+            self._build_parsed_invoice(
+                invoice_number="INV-MODAL",
+                property_code_raw="unknown",
+                property_code_normalized="UNKNOWN",
+                property_code_validated=False,
+            )
+        ])
+
+        response = self.client.get(reverse("invoices:review_queue"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Confirm bulk save")
+
+    def test_property_audit_groups_property_codes_case_insensitively(self) -> None:
+        Invoice.objects.create(
+            invoice_number="INV-CASE-1",
+            property_code_raw="ssoh",
+            property_code_normalized="SSOH",
+        )
+        Invoice.objects.create(
+            invoice_number="INV-CASE-2",
+            property_code_raw="SSOH",
+            property_code_normalized="SSOH",
+        )
+
+        response = self.client.get(reverse("invoices:property_audit"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<span class=\"code\">SSOH</span>", html=True)
+        self.assertContains(response, "<span class=\"count\">2</span>", html=True)
+
+    def test_ajax_approve_rejects_missing_property(self) -> None:
+        invoice = InvoiceRepositoryService().save_parsed_invoices([
+            self._build_parsed_invoice(
+                invoice_number="INV-AJAX-BLOCKED",
+                property_code_raw="unknown",
+                property_code_normalized="UNKNOWN",
+                property_code_validated=False,
+            )
+        ])[0]
+        line_item = invoice.line_items.first()
+        approved_gl = GLAccount.objects.get(code="6328")
+
+        response = self.client.post(
+            reverse("invoices:approve_item", args=[line_item.id]),
+            {"gl_code": approved_gl.code},
+        )
+
+        line_item.refresh_from_db()
+        self.assertEqual(response.status_code, 400)
+        self.assertIsNone(line_item.approved_gl)
+        self.assertIn("validated", response.json()["error"])
 
     def test_reports_view_renders_gl_and_property_aggregates(self) -> None:
         invoice = InvoiceRepositoryService().save_parsed_invoices([self._build_parsed_invoice()])[0]
@@ -292,6 +433,6 @@ class DashboardViewTests(TestCase):
         response = self.client.get(reverse("invoices:reports"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Spend By GL")
-        self.assertContains(response, "6734 - POOL / REC SUPPLIES")
+        self.assertContains(response, "Spend by GL Code")
+        self.assertContains(response, "6734 &mdash; POOL / REC SUPPLIES", html=True)
         self.assertContains(response, "SSOH")

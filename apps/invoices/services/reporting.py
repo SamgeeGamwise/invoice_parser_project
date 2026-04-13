@@ -1,6 +1,8 @@
 from collections import defaultdict
 from decimal import Decimal
 
+from django.db.models import Q
+
 from ..models import Invoice, InvoiceLineItem
 
 
@@ -10,9 +12,13 @@ class ReportingService:
         line_items = InvoiceLineItem.objects.count()
         pending_review = InvoiceLineItem.objects.filter(
             item_type=InvoiceLineItem.ItemType.PRODUCT,
-            approved_gl__isnull=True,
+        ).filter(
+            Q(approved_gl__isnull=True) | Q(invoice__property_reference__isnull=True)
         ).count()
-        reviewed_items = InvoiceLineItem.objects.filter(approved_gl__isnull=False).count()
+        reviewed_items = InvoiceLineItem.objects.filter(
+            approved_gl__isnull=False,
+            invoice__property_reference__isnull=False,
+        ).count()
 
         return {
             "invoice_count": invoices,

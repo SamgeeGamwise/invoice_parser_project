@@ -106,6 +106,40 @@
             color: var(--muted);
         }
 
+        .flash-stack {
+            display: grid;
+            gap: 0.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .flash {
+            padding: 0.9rem 1rem;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.96);
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+            font-size: 0.88rem;
+            line-height: 1.45;
+        }
+
+        .flash.flash-success {
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+            color: #166534;
+        }
+
+        .flash.flash-error {
+            background: #fff7ed;
+            border-color: #fed7aa;
+            color: #9a3412;
+        }
+
+        .flash.flash-info {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1d4ed8;
+        }
+
         .legend {
             display: flex;
             flex-wrap: wrap;
@@ -520,6 +554,11 @@
             box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
         }
         .gl-input::placeholder { color: var(--muted); }
+        .gl-input:disabled {
+            color: #94a3b8;
+            background: #f8fafc;
+            cursor: not-allowed;
+        }
 
         /* Portal dropdown — appended to <body>, positioned via JS */
         .gl-dropdown {
@@ -571,6 +610,101 @@
             color: #92400e;
             border: 1px solid #fde68a;
             white-space: nowrap;
+        }
+
+        .property-flag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            margin-top: 0.35rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            background: #fff1f2;
+            border: 1px solid #fecdd3;
+            color: #be123c;
+            font-size: 0.72rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .cell-note {
+            display: block;
+            margin-top: 0.35rem;
+            font-size: 0.75rem;
+            color: var(--muted);
+            line-height: 1.35;
+        }
+
+        .btn:disabled,
+        .btn[disabled] {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.56);
+            backdrop-filter: blur(5px);
+            z-index: 120;
+        }
+
+        .modal-backdrop[hidden] { display: none; }
+
+        .modal-card {
+            width: min(32rem, 100%);
+            padding: 1.2rem;
+            border-radius: 18px;
+            border: 1px solid rgba(219, 228, 240, 0.98);
+            background: rgba(255, 255, 255, 0.99);
+            box-shadow: 0 28px 60px rgba(15, 23, 42, 0.24);
+        }
+
+        .modal-card h2 {
+            margin: 0 0 0.45rem;
+            font-size: 1.12rem;
+        }
+
+        .modal-copy {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.88rem;
+            line-height: 1.5;
+        }
+
+        .modal-stats {
+            display: grid;
+            gap: 0.55rem;
+            margin: 1rem 0 1.1rem;
+        }
+
+        .modal-stat {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.7rem 0.8rem;
+            border-radius: 12px;
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            font-size: 0.86rem;
+        }
+
+        .modal-stat strong {
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.6rem;
+            flex-wrap: wrap;
         }
 
         .footer-actions {
@@ -674,9 +808,18 @@
     <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
     <a href="{% url 'invoices:review_queue' %}" class="active">Review Queue</a>
     <a href="{% url 'invoices:reports' %}">Reports</a>
+    <a href="{% url 'invoices:property_audit' %}">Property Audit</a>
 </nav>
 
 <main>
+    {% if messages %}
+    <div class="flash-stack">
+        {% for message in messages %}
+        <div class="flash flash-{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <div class="card intro-card">
         <h1>Review Queue</h1>
         <p>Approve or override the suggested GL code for each line item. The queue keeps server-side sorting for reliability, and your column layout stays local to this browser.</p>
@@ -686,6 +829,12 @@
             <span class="legend-item"><span class="legend-dot dot-review"></span>Needs review</span>
         </div>
     </div>
+
+    {% if property_blocked_count %}
+    <div class="flash flash-error">
+        {{ property_blocked_count }} row{{ property_blocked_count|pluralize }} on this page {{ property_blocked_count|pluralize:"is,are" }} flagged because the invoice property code is missing or not validated. Those rows cannot be approved until the invoice property is fixed.
+    </div>
+    {% endif %}
 
     {% if page_obj.object_list %}
     <form method="post" id="queue-form">
@@ -722,7 +871,7 @@
                     </div>
 
                     <button type="button" class="btn btn-outline" id="reset-table-button">Reset table</button>
-                    <button type="submit" class="btn btn-primary">Save page</button>
+                    <button type="button" class="btn btn-primary" data-open-save-confirm>Save page</button>
                 </div>
             </div>
 
@@ -787,7 +936,11 @@
                         </thead>
                         <tbody>
                             {% for item in page_obj %}
-                            <tr class="tier-{{ item.tier }}" id="row-{{ item.id }}" data-item-id="{{ item.id }}">
+                            <tr
+                                class="tier-{{ item.tier }}"
+                                id="row-{{ item.id }}"
+                                data-item-id="{{ item.id }}"
+                                data-property-blocked="{% if item.has_valid_property %}false{% else %}true{% endif %}">
                                 <td data-col-id="desc">
                                     <span class="desc-text" title="{{ item.description }}">{{ item.description }}</span>
                                 </td>
@@ -795,6 +948,9 @@
                                     <span class="invoice-ref">
                                         <a href="{% url 'invoices:invoice_detail' item.invoice_id %}">{{ item.invoice.invoice_number }}</a>
                                     </span>
+                                    {% if not item.has_valid_property %}
+                                    <span class="property-flag">Property required</span>
+                                    {% endif %}
                                 </td>
                                 <td data-col-id="amount" class="amount-cell">
                                     {% if item.line_total %}${{ item.line_total }}{% else %}&mdash;{% endif %}
@@ -825,16 +981,26 @@
                                     <div class="gl-search">
                                         <input type="text" class="gl-input"
                                                placeholder="Search by name or code…"
-                                               autocomplete="off">
+                                               autocomplete="off"
+                                               {% if not item.has_valid_property %}disabled title="{{ item.approval_block_reason }}"{% endif %}>
                                         <input type="hidden"
                                                name="item_{{ item.id }}_gl"
                                                id="sel_{{ item.id }}"
                                                value="{{ item.suggested_gl.code|default:'' }}"
                                                data-suggested="{{ item.suggested_gl.code|default:'' }}">
                                     </div>
+                                    {% if not item.has_valid_property %}
+                                    <span class="cell-note">{{ item.approval_block_reason }}</span>
+                                    {% endif %}
                                 </td>
                                 <td data-col-id="actions">
-                                    <button type="button" class="btn btn-accept" onclick="acceptItem({{ item.id }})">Accept</button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-accept"
+                                        onclick="acceptItem({{ item.id }})"
+                                        {% if not item.has_valid_property %}disabled title="{{ item.approval_block_reason }}"{% endif %}>
+                                        Accept
+                                    </button>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -845,10 +1011,25 @@
 
             <div class="footer-actions">
                 <span class="footer-note">Column changes are saved in local storage for this browser only.</span>
-                <button type="submit" class="btn btn-primary">Save page</button>
+                <button type="button" class="btn btn-primary" data-open-save-confirm>Save page</button>
             </div>
         </div>
     </form>
+
+    <div class="modal-backdrop" id="save-confirm-modal" hidden>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="save-confirm-title">
+            <h2 id="save-confirm-title">Confirm bulk save</h2>
+            <p class="modal-copy">We’ll save the GL approvals currently selected on this page. Flagged rows with missing property validation will be skipped until the invoice property is fixed.</p>
+            <div class="modal-stats">
+                <div class="modal-stat"><span>Approvals ready to save</span><strong id="save-ready-count">0</strong></div>
+                <div class="modal-stat"><span>Flagged rows that will be skipped</span><strong id="save-blocked-count">0</strong></div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" id="cancel-save-confirm">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-save-submit">Save approvals</button>
+            </div>
+        </div>
+    </div>
 
     <div class="pagination">
         {% if page_obj.has_previous %}
@@ -886,10 +1067,17 @@
     const APPROVE_URL_BASE = "{% url 'invoices:approve_item' 0 %}".replace("/0/", "/");
     const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? "";
 
+    const QUEUE_FORM = document.getElementById("queue-form");
     const TABLE = document.getElementById("queue-table");
     const COLUMN_MENU = document.getElementById("column-menu");
     const COLUMN_MENU_BUTTON = document.getElementById("column-menu-button");
     const RESET_TABLE_BUTTON = document.getElementById("reset-table-button");
+    const SAVE_CONFIRM_MODAL = document.getElementById("save-confirm-modal");
+    const SAVE_READY_COUNT = document.getElementById("save-ready-count");
+    const SAVE_BLOCKED_COUNT = document.getElementById("save-blocked-count");
+    const SAVE_CONFIRM_BUTTONS = document.querySelectorAll("[data-open-save-confirm]");
+    const CANCEL_SAVE_CONFIRM = document.getElementById("cancel-save-confirm");
+    const CONFIRM_SAVE_SUBMIT = document.getElementById("confirm-save-submit");
     const STORAGE_KEYS = {
             visibility: "reviewQueue.columnVisibility.v2",
             widths: "reviewQueue.columnWidths.v3",
@@ -1074,13 +1262,18 @@
     function acceptItem(itemId) {
         const select = document.getElementById(`sel_${itemId}`);
         const glCode = select?.value || select?.dataset.suggested;
+        const row = document.getElementById(`row-${itemId}`);
+
+        if (row?.dataset.propertyBlocked === "true") {
+            alert("This row is flagged because the invoice property code is missing or not validated.");
+            return;
+        }
 
         if (!glCode) {
             alert("No GL suggestion is available for this item. Please choose one from the dropdown.");
             return;
         }
 
-        const row = document.getElementById(`row-${itemId}`);
         if (!row) return;
         row.classList.add("removing");
 
@@ -1117,6 +1310,32 @@
             });
     }
 
+    function getSaveCounts() {
+        let ready = 0;
+        let blocked = 0;
+
+        TABLE?.querySelectorAll("tbody tr").forEach(row => {
+            const hiddenInput = row.querySelector("input[type=hidden][name^='item_']");
+            if (!hiddenInput?.value) return;
+            if (row.dataset.propertyBlocked === "true") blocked += 1;
+            else ready += 1;
+        });
+
+        return { ready, blocked };
+    }
+
+    function openSaveConfirm() {
+        if (!SAVE_CONFIRM_MODAL) return;
+        const counts = getSaveCounts();
+        if (SAVE_READY_COUNT) SAVE_READY_COUNT.textContent = String(counts.ready);
+        if (SAVE_BLOCKED_COUNT) SAVE_BLOCKED_COUNT.textContent = String(counts.blocked);
+        SAVE_CONFIRM_MODAL.hidden = false;
+    }
+
+    function closeSaveConfirm() {
+        if (SAVE_CONFIRM_MODAL) SAVE_CONFIRM_MODAL.hidden = true;
+    }
+
     if (TABLE) {
         applySavedWidths();
         initColumnVisibility();
@@ -1146,11 +1365,25 @@
         });
 
         document.addEventListener("keydown", event => {
-            if (event.key === "Escape") closeColumnMenu();
+            if (event.key === "Escape") {
+                closeColumnMenu();
+                closeSaveConfirm();
+            }
         });
 
         COLUMN_MENU_BUTTON?.addEventListener("click", toggleColumnMenu);
         RESET_TABLE_BUTTON?.addEventListener("click", resetTablePreferences);
+        SAVE_CONFIRM_BUTTONS.forEach(button => {
+            button.addEventListener("click", openSaveConfirm);
+        });
+        CANCEL_SAVE_CONFIRM?.addEventListener("click", closeSaveConfirm);
+        CONFIRM_SAVE_SUBMIT?.addEventListener("click", () => {
+            closeSaveConfirm();
+            QUEUE_FORM?.submit();
+        });
+        SAVE_CONFIRM_MODAL?.addEventListener("click", event => {
+            if (event.target === SAVE_CONFIRM_MODAL) closeSaveConfirm();
+        });
     }
 
     // ── GL searchable combobox (portal pattern) ────────────────────────────
