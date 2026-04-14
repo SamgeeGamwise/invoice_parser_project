@@ -168,33 +168,27 @@ ML_CONFIG = {
     # net. Keep it higher early on to avoid noisy results.
     "KNN_MIN_SIMILARITY": 0.45,
 
-    # # ── Auto-approval thresholds (not yet active) ─────────────────────────────
-    # # These settings are reserved for a future auto-approval feature. They are
-    # # not currently used but are here so you can configure them in advance.
-    # #
-    # # AUTO_APPROVE_AGREE:
-    # #   If the model's confidence is at or above this level AND its suggestion
-    # #   matches the invoice GL, the item can be approved without human review.
-    # #   Start conservative (0.90). Lower to 0.80 once you trust the model.
-    # "TIER_AUTO_APPROVE_AGREE": 0.90,
+    # ── Approval queue tier thresholds ───────────────────────────────────────
+    # These control how line items are color-coded in the review queue.
+    # Items are placed into one of three lanes:
+    #
+    # "Auto" (green) — high confidence, suggestion agrees with invoice GL.
+    #   These are very likely correct and need only a quick glance.
+    #   TIER_AUTO_APPROVE_AGREE sets the confidence cutoff for this lane.
+    "TIER_AUTO_APPROVE_AGREE": 0.90,
 
-    # # AUTO_APPROVE_OVERRIDE:
-    # #   If the model's confidence is at or above this level AND its suggestion
-    # #   is different from the invoice GL, the item can be approved automatically.
-    # #   Keep this very high — the model should be near-certain before overriding
-    # #   what the invoice says without a human checking first.
-    # "TIER_AUTO_APPROVE_OVERRIDE": 0.95,
+    # "Auto override" — high confidence even when suggestion differs from invoice GL.
+    #   Keep this very high. The model must be near-certain before showing
+    #   a different code without a human double-checking.
+    "TIER_AUTO_APPROVE_OVERRIDE": 0.95,
 
-    # # QUICK_CONFIRM_AGREE:
-    # #   Confidence at or above this level AND suggestion matches invoice GL →
-    # #   item goes into the fast-review lane instead of the full review queue.
-    # "TIER_QUICK_CONFIRM_AGREE": 0.60,
+    # "Confirm" (yellow) — moderate confidence, suggestion agrees with invoice GL.
+    #   Worth a quick look but probably fine.
+    "TIER_QUICK_CONFIRM_AGREE": 0.60,
 
-    # # QUICK_CONFIRM_OVERRIDE:
-    # #   Confidence at or above this level AND suggestion differs from invoice GL →
-    # #   item goes into the fast-review lane.
-    # "TIER_QUICK_CONFIRM_OVERRIDE": 0.85,
+    # "Confirm override" — moderate confidence when suggestion differs from invoice GL.
+    "TIER_QUICK_CONFIRM_OVERRIDE": 0.85,
 
-    # # Items that don't meet any of the above thresholds always go into the
-    # # full review queue where a human must approve them manually.
+    # Items below all of the above land in the full review lane (red) and
+    # must be approved manually.
 }
