@@ -2,18 +2,36 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-SAMPLE_INVOICES_DIR = DATA_DIR / "samples" / "invoices"
-REFERENCE_DATA_DIR = DATA_DIR / "reference"
-ARCHIVES_DIR = DATA_DIR / "archives"
-OUTPUT_DIR = DATA_DIR / "output"
-PARSED_INVOICES_JSON = OUTPUT_DIR / "parsed_invoices.json"
+
+# ── Folder locations ──────────────────────────────────────────────────────────
+
+DATA_DIR              = BASE_DIR / "data"
+SAMPLE_INVOICES_DIR   = DATA_DIR / "samples" / "invoices"
+REFERENCE_DATA_DIR    = DATA_DIR / "reference"
+ARCHIVES_DIR          = DATA_DIR / "archives"
+OUTPUT_DIR            = DATA_DIR / "output"
+PARSED_INVOICES_JSON  = OUTPUT_DIR / "parsed_invoices.json"
+
+# ── Bulk upload limits ────────────────────────────────────────────────────────
+
+# Maximum number of PDF files that can be uploaded in a single batch.
 BULK_UPLOAD_MAX_FILES = 500
+
+# Maximum size of each individual PDF file (in megabytes).
+BULK_UPLOAD_MAX_FILE_SIZE_MB = 50
+
+# How many invoices are processed at a time during a bulk upload.
+# Lower this if the server feels sluggish during large uploads.
 BULK_PROCESSING_BATCH_SIZE = 50
+
+# How many invoices can be processed in parallel at once.
+# Raise this if you have a fast machine; lower it if uploads crash or freeze.
 BULK_PROCESSING_MAX_WORKERS = 16
 
-SECRET_KEY = "replace-me-before-production"
-DEBUG = True
+# ── Django core settings ──────────────────────────────────────────────────────
+
+SECRET_KEY   = "not-so-secret"
+DEBUG        = True
 ALLOWED_HOSTS = ["127.0.0.1", "localhost", "testserver"]
 
 INSTALLED_APPS = [
@@ -23,6 +41,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.humanize",
     "apps.invoices",
 ]
 
@@ -36,7 +55,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "config.urls"
+ROOT_URLCONF    = "config.urls"
 
 TEMPLATES = [
     {
@@ -62,90 +81,120 @@ DATABASES = {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
         "OPTIONS": {
+            # How many seconds to wait if the database is locked before giving up.
             "timeout": 20,
         },
     }
 }
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "America/Denver"
-USE_I18N = True
-USE_TZ = True
+TIME_ZONE     = "America/Denver"
+USE_I18N      = True
+USE_TZ        = True
 
 STATIC_URL = "static/"
-MEDIA_URL = "media/"
+MEDIA_URL  = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # Allow large direct-PDF bulk uploads while keeping large file bodies on disk
 # instead of in memory as early as possible.
 DATA_UPLOAD_MAX_NUMBER_FILES = BULK_UPLOAD_MAX_FILES
-DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
-FILE_UPLOAD_MAX_MEMORY_SIZE = 512 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE  = 20 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE  = 512 * 1024
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# ── ML / Classifier configuration ────────────────────────────────────────────
-# Edit these values to tune the classifier without touching service code.
-# Restart the dev server after saving changes (make run).
+# ── Suggestion model settings ─────────────────────────────────────────────────
+# These values control how the GL code suggestion model scores and ranks
+# candidates for each line item. You can tune them here without touching any
+# other code. Restart the server after saving changes (make run).
 #
-# Suggested tuning workflow:
-#   1. Upload a batch of invoices and review them.
-#   2. If the top suggestion is frequently wrong, lower INVOICE_GL_PRIOR
-#      so the embedding and KNN signals have more influence.
-#   3. If the model overrides the invoice GL too aggressively, raise it.
-#   4. Once you have 200+ approved items, lower KNN_MIN_SIMILARITY slightly
-#      to cast a wider net over history.
-#   5. Once you have 500+ approved items, lower TIER_AUTO_APPROVE_AGREE
-#      to let more items auto-approve without review.
+# Quick tuning guide:
+#   - Suggestions keep matching the invoice GL even when it seems wrong?
+#     → Lower INVOICE_GL_PRIOR (try 1.0).
+#   - Suggestions feel random or ignore the invoice GL too often?
+#     → Raise INVOICE_GL_PRIOR (try 2.0).
+#   - You have 200+ approved items and want history to matter more?
+#     → Lower HISTORY_MIN_SIMILARITY slightly (try 0.35).
+#   - You have 500+ approved items and want less manual review?
+#     → Lower AUTO_APPROVE_AGREE (try 0.80).
 
 ML_CONFIG = {
 
-    # ── Scoring weights ───────────────────────────────────────────────────────
+    # ── How much the model's word-matching score counts ───────────────────────
 
-    # Multiplied by the embedding cosine similarity (0–1).
-    # This affects both the static GL-description match and the KNN vote.
-    # Raise to trust embeddings more; lower to trust them less.
+    # The model compares each line item's description against every GL account
+    # description and produces a match score from 0 to 1. This multiplier
+    # controls how much that score influences the final ranking.
+    # Higher = trust word-matching more; lower = trust it less.
     "EMBEDDING_WEIGHT": 4.0,
 
-    # Flat bonus added to whichever GL code the invoice header declares.
-    # Think of it as "the person who placed this order had a reason for picking
-    # this GL, but may have added a few items that don't belong."
-    # Raise to make the invoice GL stickier; lower to let ML override more.
-    "INVOICE_GL_PRIOR": 4.0,
+    # ── How sticky the GL code printed on the invoice is ─────────────────────
 
-    # ── KNN (history) parameters ──────────────────────────────────────────────
+    # Every invoice already has a GL code on it. This is a flat bonus added to
+    # that code's score. At 1.5, the model needs to be pretty confident in a
+    # different code before it will suggest something other than what the invoice
+    # already says. Raise this to make the invoice GL even stickier; lower it to
+    # let the model override it more freely.
+    "INVOICE_GL_PRIOR": 2,
 
-    # How many nearest approved neighbors to consider when voting.
-    # Raising this smooths out noise; lowering it makes the vote sharper.
+    # ── Small boost for commonly-used GL code ranges ──────────────────────────
+
+    # GL codes whose numeric value falls between REVIEW_RANGE_MIN and
+    # REVIEW_RANGE_MAX (inclusive) are treated as the commonly-used expense
+    # range and receive a small scoring nudge. Change these two values if your
+    # active expense codes live in a different numeric range.
+    "REVIEW_RANGE_MIN": 6000,
+    "REVIEW_RANGE_MAX": 7070,
+
+    # How large that scoring nudge is. It is intentionally small — the invoice
+    # GL and word-matching signals will always dominate it.
+    # Set to 0.0 to turn this off entirely.
+    "REVIEW_RANGE_WEIGHT": 0.75,
+
+    # ── How many approved past items the model looks back at ──────────────────
+
+    # When you approve a line item, that decision gets saved and used to inform
+    # future suggestions. This controls how many of the most similar past
+    # approvals are considered when making a new suggestion.
+    # Higher = smoother, but less sharp. Lower = sharper, but noisier.
     "KNN_K": 5,
 
-    # Approved items below this cosine similarity are ignored as noise.
-    # Lower this (e.g. 0.35) after you have 500+ approved items to cast
-    # a wider net. Keep it high early on to avoid noisy votes.
+    # Approved past items that are too different from the current line item are
+    # ignored. This is the minimum similarity required before a past approval
+    # is allowed to influence the suggestion. Items below this threshold are
+    # treated as unrelated and skipped.
+    # Lower this (e.g. 0.35) after you have 500+ approved items to cast a wider
+    # net. Keep it higher early on to avoid noisy results.
     "KNN_MIN_SIMILARITY": 0.45,
 
-    # ── Tiered approval thresholds ────────────────────────────────────────────
-    # These control the auto-approve pipeline (not yet active — reserved for
-    # future use once you have enough approved history to trust them).
-    #
-    # TIER_AUTO_APPROVE_AGREE:
-    #   Confidence at or above this → auto-approve when suggestion = invoice GL.
-    #   Start conservative (0.90). Lower to 0.80 once you trust the model.
-    "TIER_AUTO_APPROVE_AGREE": 0.90,
+    # # ── Auto-approval thresholds (not yet active) ─────────────────────────────
+    # # These settings are reserved for a future auto-approval feature. They are
+    # # not currently used but are here so you can configure them in advance.
+    # #
+    # # AUTO_APPROVE_AGREE:
+    # #   If the model's confidence is at or above this level AND its suggestion
+    # #   matches the invoice GL, the item can be approved without human review.
+    # #   Start conservative (0.90). Lower to 0.80 once you trust the model.
+    # "TIER_AUTO_APPROVE_AGREE": 0.90,
 
-    # TIER_AUTO_APPROVE_OVERRIDE:
-    #   Confidence at or above this → auto-approve when suggestion ≠ invoice GL.
-    #   Keep this very high — the model should be near-certain before overriding
-    #   the invoice GL without a human in the loop.
-    "TIER_AUTO_APPROVE_OVERRIDE": 0.95,
+    # # AUTO_APPROVE_OVERRIDE:
+    # #   If the model's confidence is at or above this level AND its suggestion
+    # #   is different from the invoice GL, the item can be approved automatically.
+    # #   Keep this very high — the model should be near-certain before overriding
+    # #   what the invoice says without a human checking first.
+    # "TIER_AUTO_APPROVE_OVERRIDE": 0.95,
 
-    # TIER_QUICK_CONFIRM_AGREE:
-    #   Confidence at or above this → quick-confirm lane when suggestion = invoice GL.
-    "TIER_QUICK_CONFIRM_AGREE": 0.60,
+    # # QUICK_CONFIRM_AGREE:
+    # #   Confidence at or above this level AND suggestion matches invoice GL →
+    # #   item goes into the fast-review lane instead of the full review queue.
+    # "TIER_QUICK_CONFIRM_AGREE": 0.60,
 
-    # TIER_QUICK_CONFIRM_OVERRIDE:
-    #   Confidence at or above this → quick-confirm lane when suggestion ≠ invoice GL.
-    "TIER_QUICK_CONFIRM_OVERRIDE": 0.85,
+    # # QUICK_CONFIRM_OVERRIDE:
+    # #   Confidence at or above this level AND suggestion differs from invoice GL →
+    # #   item goes into the fast-review lane.
+    # "TIER_QUICK_CONFIRM_OVERRIDE": 0.85,
 
-    # Below all quick-confirm thresholds → full review queue (always shown).
+    # # Items that don't meet any of the above thresholds always go into the
+    # # full review queue where a human must approve them manually.
 }

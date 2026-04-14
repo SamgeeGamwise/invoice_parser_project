@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Invoice Parser &mdash; Property Code Audit</title>
+    <title>Invoice Parser &mdash; Code Audit</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; }
         :root {
@@ -12,200 +12,446 @@
             --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
         }
         body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
-
-        nav {
-            background: var(--surface); border-bottom: 1px solid var(--border);
-            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
+        {% include "invoices/partials/navbar_styles.html" %}
+        main { max-width: 1120px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
+        h1 { font-size: 1.45rem; margin: 0 0 0.35rem; }
+        h2 { font-size: 1.08rem; margin: 0 0 0.75rem; }
+        p { margin: 0.35rem 0; color: var(--muted); font-size: 0.92rem; }
+        .flash-stack { display: grid; gap: 0.8rem; margin-bottom: 1rem; }
+        .flash { padding: 0.9rem 1rem; border-radius: 12px; border: 1px solid var(--border); background: #fff; font-size: 0.88rem; }
+        .flash-success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+        .flash-error { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+        .flash-info { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+        .hero { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+        .stats { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
+        .pill {
+            display: inline-flex; align-items: center; gap: 0.35rem;
+            padding: 0.35rem 0.8rem; border-radius: 999px; font-size: 0.82rem;
+            font-weight: 700;
         }
-        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
-        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-        nav a:hover { color: var(--blue); }
-
-        main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-
-        .notice {
-            display: flex; align-items: center; gap: 0.6rem;
-            background: #fef3c7; border: 1px solid #fde68a; border-radius: 10px;
-            padding: 0.65rem 1rem; font-size: 0.87rem; color: #92400e;
-            margin-bottom: 1.5rem;
+        .pill-blue { background: #eff6ff; color: var(--blue); }
+        .pill-green { background: #f0fdf4; color: var(--green); }
+        .pill-amber { background: #fffbeb; color: var(--amber); }
+        .pill-red { background: #fff1f2; color: var(--red); }
+        .workflow {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 0.8rem; margin-top: 1.15rem;
         }
-
-        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; }
-        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
-        h2 { font-size: 1.05rem; margin: 0 0 1rem; }
-        p  { margin: 0.4rem 0; color: var(--muted); font-size: 0.92rem; }
-
-        .stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
-        .stat-pill {
-            padding: 0.35rem 0.9rem; border-radius: 99px; font-size: 0.83rem; font-weight: 600;
+        .workflow-step {
+            border: 1px solid var(--border); border-radius: 12px;
+            background: #f8fafc; padding: 1rem;
         }
-        .stat-total   { background: #eff6ff; color: var(--blue); }
-        .stat-matched { background: #f0fdf4; color: var(--green); }
-        .stat-miss    { background: #fff1f2; color: var(--red); }
-
-        table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+        .workflow-step strong { display: block; font-size: 0.84rem; margin-bottom: 0.25rem; color: var(--text); }
+        .workflow-step span { display: block; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
+        .workflow-step.active { background: #eff6ff; border-color: #bfdbfe; }
+        .section-head {
+            display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        .section-actions { display: flex; gap: 0.65rem; flex-wrap: wrap; }
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
+            padding: 0.55rem 1rem; border-radius: 8px; font: inherit; font-size: 0.88rem;
+            font-weight: 700; cursor: pointer; text-decoration: none; border: 1px solid transparent;
+        }
+        .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-outline { background: transparent; border-color: var(--blue); color: var(--blue); }
+        .btn-outline:hover { background: #eff6ff; }
+        .btn-danger { background: #fff1f2; border-color: #fecdd3; color: #be123c; }
+        .btn-danger:hover { background: #ffe4e6; }
+        .btn-ghost { background: transparent; border-color: var(--border); color: var(--muted); }
+        .btn-ghost:hover { background: var(--bg); }
+        .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
         th {
-            text-align: left; padding: 0.5rem 0.75rem;
+            text-align: left; padding: 0.55rem 0.75rem;
             font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em;
             color: var(--muted); border-bottom: 2px solid var(--border); white-space: nowrap;
         }
-        td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        td { padding: 0.75rem; border-bottom: 1px solid var(--border); vertical-align: top; }
         tr:last-child td { border-bottom: none; }
-        tr:hover td { background: #f8fafc; }
-
+        .code { font-family: monospace; font-size: 0.86rem; }
+        .count { font-weight: 700; color: var(--text); }
         .badge {
-            display: inline-block; padding: 0.15rem 0.55rem; border-radius: 99px;
-            font-size: 0.74rem; font-weight: 600; white-space: nowrap;
+            display: inline-block; padding: 0.16rem 0.55rem; border-radius: 999px;
+            font-size: 0.75rem; font-weight: 700;
         }
-        .badge-ok      { background: #f0fdf4; color: var(--green); border: 1px solid #bbf7d0; }
-        .badge-miss    { background: #fff1f2; color: var(--red);   border: 1px solid #fecaca; }
-        .badge-warn    { background: #fef3c7; color: #92400e;      border: 1px solid #fde68a; }
-        .badge-none    { background: #f8fafc; color: var(--muted); border: 1px solid var(--border); }
-
-        .code { font-family: monospace; font-size: 0.85rem; }
-        .count { font-weight: 600; color: var(--text); }
-        .normalized-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-        .norm-tag {
-            font-family: monospace; font-size: 0.8rem;
-            background: #f1f5f9; border: 1px solid var(--border);
-            border-radius: 5px; padding: 0.1rem 0.4rem;
+        .badge-ok { background: #dcfce7; color: #15803d; }
+        .badge-miss { background: #fff1f2; color: #be123c; }
+        .tag-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+        .tag {
+            display: inline-flex; align-items: center;
+            padding: 0.18rem 0.45rem; border-radius: 999px;
+            background: #f8fafc; border: 1px solid var(--border);
+            color: #334155; font-size: 0.77rem;
         }
-
-        .section-divider { margin: 0.5rem 0 1rem; border: none; border-top: 1px solid var(--border); }
-
-        a { color: var(--blue); text-decoration: none; }
-        a:hover { text-decoration: underline; }
+        .table-actions { display: flex; gap: 0.45rem; flex-wrap: wrap; }
+        .empty { text-align: center; color: var(--muted); padding: 2rem 1rem; }
+        .helper { font-size: 0.8rem; color: var(--muted); }
+        .helper code { font-family: monospace; background: var(--bg); padding: 0.1rem 0.3rem; border-radius: 4px; }
+        .muted { color: var(--muted); }
+        .errorlist { margin: 0.3rem 0 0; padding-left: 1rem; color: var(--red); font-size: 0.82rem; }
+        dialog {
+            border: none; border-radius: 14px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+            padding: 0; max-width: 460px; width: 92%;
+        }
+        dialog::backdrop { background: rgba(0,0,0,0.35); }
+        .modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid var(--border);
+        }
+        .modal-header h3 { margin: 0; font-size: 1rem; }
+        .modal-close {
+            background: none; border: none; cursor: pointer; font-size: 1.3rem;
+            color: var(--muted); line-height: 1; padding: 0.1rem 0.3rem; border-radius: 4px;
+        }
+        .modal-close:hover { background: var(--bg); }
+        .modal-body { padding: 1.25rem 1.5rem 1.5rem; }
+        .field { margin-bottom: 0.9rem; }
+        .field label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.3rem; font-weight: 600; }
+        .field input[type="text"], .field select {
+            width: 100%; font: inherit; font-size: 0.88rem; padding: 0.55rem 0.65rem;
+            border: 1px solid var(--border); border-radius: 8px;
+        }
+        .field input:focus, .field select:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue); }
+        .checkbox-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0 1rem; font-size: 0.88rem; }
+        .checkbox-row input { accent-color: var(--blue); }
+        .modal-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
     </style>
 </head>
 <body>
 
-<nav>
-    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
-    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
-    <a href="{% url 'invoices:review_queue' %}">Approval Queue</a>
-    <a href="{% url 'invoices:reports' %}">Reports</a>
-    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
-    <a href="{% url 'invoices:properties' %}">Properties</a>
-    <a href="{% url 'invoices:property_audit' %}" class="active">Code Audit</a>
-</nav>
+{% include "invoices/partials/navbar.html" %}
 
 <main>
-
-    <div class="notice">
-        ⚠ Diagnostic page &mdash; for testing purposes only. Not linked from the main navigation.
+    {% if messages %}
+    <div class="flash-stack">
+        {% for message in messages %}
+        <div class="flash flash-{{ message.tags|default:'success' }}">{{ message }}</div>
+        {% endfor %}
     </div>
+    {% endif %}
 
-    <div class="card">
-        <h1>Property Code Audit</h1>
-        <p>Every unique raw property code extracted from your invoices, how it normalized, and whether it matched a known property reference.</p>
-        <div class="stats">
-            <span class="stat-pill stat-total">{{ total_invoices }} invoice{{ total_invoices|pluralize }}</span>
-            <span class="stat-pill stat-matched">{{ matched_invoices }} matched</span>
-            <span class="stat-pill stat-miss">{{ unmatched_invoices }} unmatched</span>
+    {% comment %} <section class="card">
+        <div class="hero">
+            <div>
+                <h1>Code Audit</h1>
+                <p>Audit invoice codes after upload and before approval. This step closes the gap between what the invoices contain and what your reference tables currently know.</p>
+            </div>
+            <div class="section-actions">
+                <a class="btn btn-outline" href="{% url 'invoices:gl_codes' %}">Manage GL Codes</a>
+                <a class="btn btn-outline" href="{% url 'invoices:properties' %}">Manage Properties</a>
+                <a class="btn btn-primary" href="{% url 'invoices:review_queue' %}">Go to Approval Queue</a>
+            </div>
         </div>
-    </div>
+        <div class="stats">
+            <span class="pill pill-blue">{{ total_invoices }} invoice{{ total_invoices|pluralize }}</span>
+            <span class="pill pill-amber">{{ gl_audit_missing_count }} GL code{{ gl_audit_missing_count|pluralize }} to review</span>
+            <span class="pill pill-red">{{ property_audit_missing_count }} property code{{ property_audit_missing_count|pluralize }} to review</span>
+            <span class="pill pill-green">{{ matched_property_invoices }} invoice{{ matched_property_invoices|pluralize }} with validated properties</span>
+        </div>
+        <div class="workflow">
+            <div class="workflow-step">
+                <strong>1. Load Reference Data</strong>
+                <span>Upload or maintain GL Codes and Properties.</span>
+            </div>
+            <div class="workflow-step">
+                <strong>2. Upload Invoices</strong>
+                <span>Parse PDFs and capture invoice-level GL and property codes.</span>
+            </div>
+            <div class="workflow-step active">
+                <strong>3. Audit Codes</strong>
+                <span>Resolve anything missing before reviewers start approving line items.</span>
+            </div>
+            <div class="workflow-step">
+                <strong>4. Approval Queue</strong>
+                <span>Approve line items once both code sets are available.</span>
+            </div>
+            <div class="workflow-step">
+                <strong>5. Reports</strong>
+                <span>Review totals and prepare for a future submit step.</span>
+            </div>
+        </div>
+    </section> {% endcomment %}
 
-    <!-- Section 1: Raw codes from invoices -->
-    <div class="card">
-        <h2>Raw codes found on invoices</h2>
+    <section class="card" id="gl-audit">
+        <div class="section-head">
+            <div>
+                <h2>GL Code Audit</h2>
+                <p>GL codes found on uploaded invoices. Any codes not in your GL table must be added before approval.</p>
+            </div>
+            <div class="stats" style="margin-top:0;">
+                <span class="pill pill-blue">{{ gl_audit_total_codes }} unique code{{ gl_audit_total_codes|pluralize }}</span>
+                <span class="pill pill-amber">{{ gl_audit_missing_invoices }} invoice{{ gl_audit_missing_invoices|pluralize }} blocked by missing GL setup</span>
+            </div>
+        </div>
+
+        {% if unmatched_gl_rows %}
         <table>
             <thead>
                 <tr>
-                    <th>Raw (from PDF)</th>
-                    <th>Normalized to</th>
+                    <th>Invoice GL Code</th>
+                    <th>Invoice Description</th>
                     <th>Invoices</th>
-                    <th>Reference match</th>
-                    <th>Notes</th>
+                    <th>Status</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
-                {% for group in invoice_groups %}
+                {% for row in unmatched_gl_rows %}
                 <tr>
-                    <td><span class="code">{{ group.raw }}</span></td>
+                    <td><span class="code">{{ row.code }}</span></td>
                     <td>
-                        {% if group.normalized_set %}
-                        <div class="normalized-list">
-                            {% for code in group.normalized_set %}
-                            <span class="norm-tag">{{ code }}</span>
+                        {% if row.descriptions %}
+                        <div class="tag-row">
+                            {% for description in row.descriptions %}
+                            <span class="tag">{{ description }}</span>
                             {% endfor %}
                         </div>
                         {% else %}
-                        <span style="color:var(--muted);">—</span>
+                        <span class="muted">No description extracted</span>
                         {% endif %}
                     </td>
-                    <td><span class="count">{{ group.total }}</span></td>
+                    <td><span class="count">{{ row.invoice_count }}</span></td>
+                    <td><span class="badge badge-miss">Missing from GL Codes</span></td>
                     <td>
-                        {% if group.matched %}
-                        <span class="badge badge-ok">&#10003; Matched</span>
-                        {% else %}
-                        <span class="badge badge-miss">&#10007; No match</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if group.inconsistent %}
-                        <span class="badge badge-warn">⚠ Multiple normalizations</span>
-                        {% elif not group.matched %}
-                        <span class="badge badge-miss">Not in reference data</span>
-                        {% else %}
-                        <span class="badge badge-none">OK</span>
-                        {% endif %}
+                        <div class="table-actions">
+                            <button
+                                class="btn btn-primary btn-sm open-gl-modal"
+                                data-code="{{ row.code }}"
+                                data-description="{% if row.descriptions %}{{ row.descriptions.0|escape }}{% endif %}">
+                                Add GL Code
+                            </button>
+                        </div>
                     </td>
                 </tr>
-                {% empty %}
-                <tr><td colspan="5" style="color:var(--muted); text-align:center; padding:2rem;">No invoices found.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
-    </div>
+        {% else %}
+        <div class="empty">All invoice GL codes already exist in your GL Codes table.</div>
+        {% endif %}
 
-    <!-- Section 2: Known references vs invoice coverage -->
-    <div class="card">
-        <h2>Known property references</h2>
-        <p>All entries from your reference data file, with how many invoices resolved to each one.</p>
-        <hr class="section-divider">
+        {% if gl_audit_blank_invoices %}
+        <p class="helper" style="margin-top:1rem;">{{ gl_audit_blank_invoices }} invoice{{ gl_audit_blank_invoices|pluralize }} did not include an invoice-level GL code.</p>
+        {% endif %}
+    </section>
+
+    <section class="card" id="property-audit">
+        <div class="section-head">
+            <div>
+                <h2>Property Code Audit</h2>
+                <p>Property codes found on invoices that have no matching reference. Add a new property or link to an existing one.</p>
+            </div>
+            <div class="stats" style="margin-top:0;">
+                <span class="pill pill-blue">{{ property_audit_total_codes }} unique code{{ property_audit_total_codes|pluralize }}</span>
+                <span class="pill pill-red">{{ property_audit_missing_invoices }} invoice{{ property_audit_missing_invoices|pluralize }} still need property validation</span>
+            </div>
+        </div>
+
+        {% if unmatched_property_rows %}
         <table>
             <thead>
                 <tr>
-                    <th>Code</th>
-                    <th>Website ID</th>
-                    <th>Name</th>
-                    <th>Invoices matched</th>
+                    <th>Invoice Property Code</th>
+                    <th>Raw Variants</th>
+                    <th>Invoices</th>
+                    <th>Status</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
-                {% for ref in references %}
+                {% for row in unmatched_property_rows %}
                 <tr>
-                    <td><span class="code">{{ ref.code }}</span></td>
+                    <td><span class="code">{{ row.display_code }}</span></td>
                     <td>
-                        {% if ref.website_id %}
-                        <span class="code">{{ ref.website_id }}</span>
+                        {% if row.raw_variants %}
+                        <div class="tag-row">
+                            {% for raw in row.raw_variants %}
+                            <span class="tag code">{{ raw }}</span>
+                            {% endfor %}
+                        </div>
                         {% else %}
-                        <span style="color:var(--muted);">—</span>
+                        <span class="muted">No raw code captured</span>
                         {% endif %}
                     </td>
+                    <td><span class="count">{{ row.invoice_count }}</span></td>
+                    <td><span class="badge badge-miss">Missing from Properties</span></td>
                     <td>
-                        {% if ref.display_name %}
-                        {{ ref.display_name }}
-                        {% else %}
-                        <span style="color:var(--muted);">—</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if ref.invoice_count %}
-                        <span class="count">{{ ref.invoice_count }}</span>
-                        {% else %}
-                        <span class="badge badge-warn">0 &mdash; no invoices</span>
-                        {% endif %}
+                        <div class="table-actions">
+                            {% if row.audit_code %}
+                            <button
+                                class="btn btn-primary btn-sm open-property-modal"
+                                data-code="{{ row.audit_code }}">
+                                Add Property
+                            </button>
+                            <button
+                                class="btn btn-outline btn-sm open-link-modal"
+                                data-code="{{ row.audit_code }}"
+                                data-label="{{ row.display_code }}">
+                                Link Existing
+                            </button>
+                            {% else %}
+                            <span class="helper">Blank code must be fixed on the invoice source.</span>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
-                {% empty %}
-                <tr><td colspan="5" style="color:var(--muted); text-align:center; padding:2rem;">No property references loaded.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
-    </div>
+        {% else %}
+        <div class="empty">All invoice property codes are already linked to known properties.</div>
+        {% endif %}
 
+        {% if property_audit_blank_invoices %}
+        <p class="helper" style="margin-top:1rem;">{{ property_audit_blank_invoices }} invoice{{ property_audit_blank_invoices|pluralize }} did not include a recognizable property code.</p>
+        {% endif %}
+    </section>
 </main>
+
+<dialog id="gl-modal">
+    <div class="modal-header">
+        <h3>Add GL Code From Audit</h3>
+        <button type="button" class="modal-close" onclick="document.getElementById('gl-modal').close()">&times;</button>
+    </div>
+    <div class="modal-body">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_gl_from_audit">
+            <div class="field">
+                <label for="{{ gl_form.code.id_for_label }}">Code</label>
+                {{ gl_form.code }}
+                {{ gl_form.code.errors }}
+            </div>
+            <div class="field">
+                <label for="{{ gl_form.description.id_for_label }}">Description</label>
+                {{ gl_form.description }}
+                {{ gl_form.description.errors }}
+            </div>
+            <div class="checkbox-row">
+                {{ gl_form.in_review_range }}
+                <label for="{{ gl_form.in_review_range.id_for_label }}">Available for approval</label>
+            </div>
+            {% if gl_form.non_field_errors %}<ul class="errorlist">{% for error in gl_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save GL Code</button>
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('gl-modal').close()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<dialog id="property-modal">
+    <div class="modal-header">
+        <h3>Add Property From Audit</h3>
+        <button type="button" class="modal-close" onclick="document.getElementById('property-modal').close()">&times;</button>
+    </div>
+    <div class="modal-body">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_property_from_audit">
+            <input type="hidden" name="audit_code" id="audit-property-code" value="">
+            <div class="field">
+                <label for="{{ property_form.code.id_for_label }}">Property Code</label>
+                {{ property_form.code }}
+                {{ property_form.code.errors }}
+            </div>
+            <div class="field">
+                <label for="{{ property_form.website_id.id_for_label }}">Website ID</label>
+                {{ property_form.website_id }}
+                {{ property_form.website_id.errors }}
+            </div>
+            <div class="field">
+                <label for="{{ property_form.display_name.id_for_label }}">Property Name</label>
+                {{ property_form.display_name }}
+                {{ property_form.display_name.errors }}
+            </div>
+            {% if property_form.non_field_errors %}<ul class="errorlist">{% for error in property_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save Property</button>
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('property-modal').close()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<dialog id="property-link-modal">
+    <div class="modal-header">
+        <h3>Link Invoice Code To Existing Property</h3>
+        <button type="button" class="modal-close" onclick="document.getElementById('property-link-modal').close()">&times;</button>
+    </div>
+    <div class="modal-body">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="assign_property_from_audit">
+            <input type="hidden" name="audit_code" id="link-audit-code" value="">
+            <p id="link-audit-label" class="helper" style="margin-bottom:1rem;"></p>
+            <div class="field">
+                <label for="link-property-select">Existing property</label>
+                <select id="link-property-select" name="property_reference_id" required>
+                    <option value="">Select a property</option>
+                    {% for ref in property_references %}
+                    <option value="{{ ref.id }}">{{ ref.code }}{% if ref.display_name %} &mdash; {{ ref.display_name }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Link Property</button>
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('property-link-modal').close()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+const glModal = document.getElementById('gl-modal');
+const propertyModal = document.getElementById('property-modal');
+const propertyLinkModal = document.getElementById('property-link-modal');
+
+document.querySelectorAll('.open-gl-modal').forEach(function (button) {
+    button.addEventListener('click', function () {
+        document.getElementById('{{ gl_form.code.id_for_label }}').value = button.dataset.code || '';
+        document.getElementById('{{ gl_form.description.id_for_label }}').value = button.dataset.description || '';
+        glModal.showModal();
+    });
+});
+
+document.querySelectorAll('.open-property-modal').forEach(function (button) {
+    button.addEventListener('click', function () {
+        const code = button.dataset.code || '';
+        document.getElementById('audit-property-code').value = code;
+        document.getElementById('{{ property_form.code.id_for_label }}').value = code;
+        document.getElementById('{{ property_form.website_id.id_for_label }}').value = '';
+        document.getElementById('{{ property_form.display_name.id_for_label }}').value = '';
+        propertyModal.showModal();
+    });
+});
+
+document.querySelectorAll('.open-link-modal').forEach(function (button) {
+    button.addEventListener('click', function () {
+        document.getElementById('link-audit-code').value = button.dataset.code || '';
+        document.getElementById('link-audit-label').textContent = `Invoices with code ${button.dataset.label || button.dataset.code} will be linked to the selected property.`;
+        document.getElementById('link-property-select').value = '';
+        propertyLinkModal.showModal();
+    });
+});
+
+{% if gl_form.errors or open_modal == "gl" %}
+document.addEventListener('DOMContentLoaded', function () {
+    glModal.showModal();
+});
+{% endif %}
+
+{% if property_form.errors or open_modal == "property" %}
+document.addEventListener('DOMContentLoaded', function () {
+    propertyModal.showModal();
+});
+{% endif %}
+</script>
+
 </body>
 </html>

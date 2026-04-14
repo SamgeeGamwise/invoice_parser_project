@@ -95,4 +95,5 @@ class ReferenceDataSyncService:
         return value.strip().upper()
 
     def _in_review_range(self, code: str) -> bool:
-        return code.isdigit() and 6000 <= int(code) <= 7070
+        cfg = settings.ML_CONFIG
+        return code.isdigit() and cfg["REVIEW_RANGE_MIN"] <= int(code) <= cfg["REVIEW_RANGE_MAX"]

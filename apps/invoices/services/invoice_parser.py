@@ -204,7 +204,10 @@ class AmazonInvoiceParserService:
         match = pattern.search(raw_text)
         if not match:
             return None
-        return datetime.strptime(match.group(1).strip(), date_format).date()
+        try:
+            return datetime.strptime(match.group(1).strip(), date_format).date()
+        except ValueError:
+            return None
 
     def _normalize_property_code(self, value: str) -> str:
         return value.strip().upper()
@@ -214,5 +217,9 @@ class AmazonInvoiceParserService:
         return re.sub(r"\s+", " ", cleaned).strip()
 
     def _to_decimal(self, value: str) -> Decimal:
+        from decimal import InvalidOperation
         cleaned_value = value.replace(",", "").replace("$", "").strip()
-        return Decimal(cleaned_value)
+        try:
+            return Decimal(cleaned_value)
+        except InvalidOperation:
+            raise ValueError(f"Could not parse amount: {value!r}")

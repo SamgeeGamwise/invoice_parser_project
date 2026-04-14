@@ -1,3 +1,4 @@
+{% load humanize %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,125 +14,142 @@
         }
         body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
 
-        nav {
-            background: var(--surface); border-bottom: 1px solid var(--border);
-            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
-        }
-        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
-        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-        nav a:hover, nav a.active { color: var(--blue); }
+        {% include "invoices/partials/navbar_styles.html" %}
 
-        main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+        main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
         .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
 
-        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
-        h2 { font-size: 1.05rem; margin: 0 0 1rem; }
-        p  { margin: 0.35rem 0; color: var(--muted); font-size: 0.92rem; }
+        h1 { font-size: 1.35rem; margin: 0 0 0.2rem; }
+        h2 { font-size: 1rem; font-weight: 600; margin: 0 0 0.9rem; }
+        p  { margin: 0.3rem 0; color: var(--muted); font-size: 0.88rem; }
 
         /* Summary stats */
-        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.9rem; margin: 1rem 0; }
-        .stat { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1rem; }
-        .stat-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.2rem; }
-        .stat-value { font-size: 1.6rem; font-weight: 700; color: var(--text); }
+        .stats { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0 0; }
+        .stat { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 0.7rem 1rem; min-width: 110px; }
+        .stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+        .stat-value { font-size: 1.45rem; font-weight: 700; color: var(--text); line-height: 1.2; }
 
-        /* Bar chart rows */
-        .chart-row { display: grid; grid-template-columns: 200px 1fr 90px; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+        /* Chart */
+        .chart-header { display: grid; grid-template-columns: 220px 1fr 100px; gap: 0.75rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-bottom: 0.4rem; border-bottom: 2px solid var(--border); margin-bottom: 0.15rem; }
+        .chart-row { display: grid; grid-template-columns: 220px 1fr 100px; gap: 0.75rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
         .chart-row:last-child { border-bottom: none; }
-        .chart-row-label { color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .chart-bar-track { background: #e2e8f0; border-radius: 99px; height: 12px; overflow: hidden; }
+        .chart-row-label { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chart-bar-track { background: #e2e8f0; border-radius: 99px; height: 10px; overflow: hidden; }
         .chart-bar-fill  { height: 100%; border-radius: 99px; background: var(--blue); }
         .chart-bar-fill.green { background: var(--green); }
-        .chart-row-amount { text-align: right; font-weight: 600; color: var(--text); white-space: nowrap; }
+        .chart-row-amount { text-align: right; font-weight: 600; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-        .chart-header { display: grid; grid-template-columns: 200px 1fr 90px; gap: 0.75rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-bottom: 0.4rem; border-bottom: 2px solid var(--border); margin-bottom: 0.25rem; }
+        /* Show-all link */
+        .show-all-row { padding: 0.6rem 0; font-size: 0.85rem; }
 
-        .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--muted); }
-        .empty-state .icon { font-size: 2rem; display: block; margin-bottom: 0.5rem; }
+        .empty-state { text-align: center; padding: 2rem 1rem; color: var(--muted); font-size: 0.9rem; }
 
         a { color: var(--blue); text-decoration: none; }
         a:hover { text-decoration: underline; }
+
+        .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.9rem; }
+        .section-head h2 { margin: 0; }
+        .count-pill { font-size: 0.78rem; color: var(--muted); }
     </style>
 </head>
 <body>
 
-<nav>
-    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
-    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
-    <a href="{% url 'invoices:review_queue' %}">Approval Queue</a>
-    <a href="{% url 'invoices:reports' %}" class="active">Reports</a>
-    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
-    <a href="{% url 'invoices:properties' %}">Properties</a>
-    <a href="{% url 'invoices:property_audit' %}">Code Audit</a>
-</nav>
+{% include "invoices/partials/navbar.html" %}
 
 <main>
 
-    <!-- Header + stats -->
     <section class="card">
-        <h1>Spend Reports</h1>
-        <p>Totals use approved GL codes where available, falling back to the system suggestion. Amounts shown pre-tax.</p>
-
+        <h1>Reports</h1>
+        <p>Spend by GL code and property, sorted by total. Approved codes are used where set; otherwise the system suggestion applies.</p>
         <div class="stats">
             <div class="stat">
                 <div class="stat-label">Invoices</div>
                 <div class="stat-value">{{ stats.invoice_count }}</div>
             </div>
             <div class="stat">
-                <div class="stat-label">Batch Size</div>
+                <div class="stat-label">Line Items</div>
                 <div class="stat-value">{{ stats.line_item_count }}</div>
             </div>
             <div class="stat">
-                <div class="stat-label">Pending Approval</div>
+                <div class="stat-label">Pending</div>
                 <div class="stat-value" style="color: var(--amber);">{{ stats.pending_review_count }}</div>
             </div>
             <div class="stat">
-                <div class="stat-label">Ready to Submit</div>
+                <div class="stat-label">Approved</div>
                 <div class="stat-value" style="color: var(--green);">{{ stats.ready_to_submit }}</div>
             </div>
             <div class="stat">
                 <div class="stat-label">Grand Total</div>
-                <div class="stat-value">${{ stats.total_amount|floatformat:2 }}</div>
+                <div class="stat-value">${{ stats.total_amount|floatformat:2|intcomma }}</div>
             </div>
         </div>
     </section>
 
-    <!-- Spend by GL -->
     <section class="card">
-        <h2>Spend by GL Code</h2>
+        <div class="section-head">
+            <h2>Spend by GL Code</h2>
+            {% if gl_total_count %}
+            <span class="count-pill">
+                {% if gl_showing_all %}
+                    {{ gl_total_count }} code{{ gl_total_count|pluralize }}
+                {% else %}
+                    Top {{ spend_by_gl|length }} of {{ gl_total_count }}
+                {% endif %}
+            </span>
+            {% endif %}
+        </div>
+
         {% if spend_by_gl %}
             <div class="chart-header">
                 <span>GL Code</span>
-                <span>Amount</span>
-                <span>Total</span>
+                <span>Breakdown</span>
+                <span style="text-align:right;">Total</span>
             </div>
             {% for row in spend_by_gl %}
             <div class="chart-row">
-                <div class="chart-row-label" title="{{ row.gl_description }}">
-                    {{ row.gl_code }} &mdash; {{ row.gl_description }}
+                <div class="chart-row-label" title="{{ row.gl_code }} — {{ row.gl_description }}">
+                    <strong>{{ row.gl_code }}</strong> &mdash; {{ row.gl_description }}
                 </div>
                 <div class="chart-bar-track">
                     <div class="chart-bar-fill" style="width: {{ row.bar_pct }}%"></div>
                 </div>
-                <div class="chart-row-amount">${{ row.total_amount|floatformat:2 }}</div>
+                <div class="chart-row-amount">${{ row.total_amount|floatformat:2|intcomma }}</div>
             </div>
             {% endfor %}
-        {% else %}
-            <div class="empty-state">
-                <span class="icon">📊</span>
-                No spend data yet. Upload and review some invoices to see this chart.
+
+            {% if not gl_showing_all and gl_total_count > gl_default_cap %}
+            <div class="show-all-row">
+                <a href="?gl=all{% if prop_showing_all %}&amp;prop=all{% endif %}">Show all {{ gl_total_count }} GL codes</a>
             </div>
+            {% elif gl_showing_all and gl_total_count > gl_default_cap %}
+            <div class="show-all-row">
+                <a href="?{% if prop_showing_all %}prop=all{% endif %}">Show top {{ gl_default_cap }} only</a>
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="empty-state">No spend data yet. Upload and review invoices to see this chart.</div>
         {% endif %}
     </section>
 
-    <!-- Spend by property -->
     <section class="card">
-        <h2>Spend by Property</h2>
+        <div class="section-head">
+            <h2>Spend by Property</h2>
+            {% if prop_total_count %}
+            <span class="count-pill">
+                {% if prop_showing_all %}
+                    {{ prop_total_count }} propert{{ prop_total_count|pluralize:"y,ies" }}
+                {% else %}
+                    Top {{ items_by_property|length }} of {{ prop_total_count }}
+                {% endif %}
+            </span>
+            {% endif %}
+        </div>
+
         {% if items_by_property %}
             <div class="chart-header">
                 <span>Property</span>
-                <span>Amount</span>
-                <span>Total</span>
+                <span>Breakdown</span>
+                <span style="text-align:right;">Total</span>
             </div>
             {% for row in items_by_property %}
             <div class="chart-row">
@@ -139,14 +157,21 @@
                 <div class="chart-bar-track">
                     <div class="chart-bar-fill green" style="width: {{ row.bar_pct }}%"></div>
                 </div>
-                <div class="chart-row-amount">${{ row.total_amount|floatformat:2 }}</div>
+                <div class="chart-row-amount">${{ row.total_amount|floatformat:2|intcomma }}</div>
             </div>
             {% endfor %}
-        {% else %}
-            <div class="empty-state">
-                <span class="icon">🏘️</span>
-                No property data yet.
+
+            {% if not prop_showing_all and prop_total_count > prop_default_cap %}
+            <div class="show-all-row">
+                <a href="?prop=all{% if gl_showing_all %}&amp;gl=all{% endif %}">Show all {{ prop_total_count }} properties</a>
             </div>
+            {% elif prop_showing_all and prop_total_count > prop_default_cap %}
+            <div class="show-all-row">
+                <a href="?{% if gl_showing_all %}gl=all{% endif %}">Show top {{ prop_default_cap }} only</a>
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="empty-state">No property data yet.</div>
         {% endif %}
     </section>
 

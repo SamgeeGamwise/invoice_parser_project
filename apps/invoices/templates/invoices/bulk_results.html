@@ -1,3 +1,4 @@
+{% load humanize %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,13 +14,7 @@
         }
         body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
 
-        nav {
-            background: var(--surface); border-bottom: 1px solid var(--border);
-            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
-        }
-        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
-        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-        nav a:hover { color: var(--blue); }
+        {% include "invoices/partials/navbar_styles.html" %}
 
         main { max-width: 860px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
         .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
@@ -82,16 +77,7 @@
 </head>
 <body>
 
-<nav>
-    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
-    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
-    <a href="{% url 'invoices:review_queue' %}">Approval Queue</a>
-    <a href="{% url 'invoices:reports' %}">Reports</a>
-    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
-    <a href="{% url 'invoices:properties' %}">Properties</a>
-    <a href="{% url 'invoices:property_audit' %}">Code Audit</a>
-</nav>
+{% include "invoices/partials/navbar.html" %}
 
 <main>
 
@@ -143,7 +129,7 @@
                 <tr>
                     <td><a href="{% url 'invoices:invoice_detail' invoice.id %}">{{ invoice.invoice_number }}</a></td>
                     <td>{{ invoice.property_code_normalized|default:"Unknown" }}</td>
-                    <td>${{ invoice.grand_total|default:"&mdash;" }}</td>
+                    <td>{% if invoice.grand_total %}${{ invoice.grand_total|floatformat:2|intcomma }}{% else %}&mdash;{% endif %}</td>
                     <td>
                         {% if invoice.pending_review_count == 0 %}
                             <span class="badge badge-green">Ready</span>

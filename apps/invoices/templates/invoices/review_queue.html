@@ -1,3 +1,4 @@
+{% load humanize %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -42,36 +43,7 @@
                 linear-gradient(180deg, #f8fbff 0%, var(--bg) 32%, #edf2f8 100%);
         }
 
-        nav {
-            display: flex;
-            align-items: center;
-            gap: 1.6rem;
-            height: 58px;
-            padding: 0 1.5rem;
-            background: rgba(255, 255, 255, 0.88);
-            border-bottom: 1px solid rgba(199, 212, 229, 0.8);
-            backdrop-filter: blur(14px);
-            position: sticky;
-            top: 0;
-            z-index: 40;
-        }
-
-        .brand {
-            margin-right: 0.2rem;
-            font-size: 1.05rem;
-            font-weight: 700;
-            color: var(--blue);
-            text-decoration: none;
-        }
-
-        nav a {
-            color: var(--muted);
-            text-decoration: none;
-            font-size: 0.92rem;
-        }
-
-        nav a:hover,
-        nav a.active { color: var(--blue); }
+        {% include "invoices/partials/navbar_styles.html" with nav_style_variant="frosted" %}
 
         main {
             max-width: 1440px;
@@ -802,16 +774,7 @@
 </head>
 <body>
 
-<nav>
-    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
-    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
-    <a href="{% url 'invoices:review_queue' %}" class="active">Approval Queue</a>
-    <a href="{% url 'invoices:reports' %}">Reports</a>
-    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
-    <a href="{% url 'invoices:properties' %}">Properties</a>
-    <a href="{% url 'invoices:property_audit' %}">Code Audit</a>
-</nav>
+{% include "invoices/partials/navbar.html" %}
 
 <main>
     {% if messages %}
@@ -824,7 +787,7 @@
 
     <div class="card intro-card">
         <h1>Approval Queue</h1>
-        <p>Approve or override the suggested GL code for each line item. The queue keeps server-side sorting for reliability, and your column layout stays local to this browser.</p>
+        <p>Assign a GL code to each line item. Sort and filter the queue, then save approvals per page.</p>
         <div class="legend" aria-label="Confidence tiers">
             <span class="legend-item"><span class="legend-dot dot-auto"></span>Auto-approve candidate</span>
             <span class="legend-item"><span class="legend-dot dot-confirm"></span>Quick confirm</span>
@@ -834,7 +797,7 @@
 
     {% if property_blocked_count %}
     <div class="flash flash-error">
-        {{ property_blocked_count }} row{{ property_blocked_count|pluralize }} on this page {{ property_blocked_count|pluralize:"is,are" }} flagged because the invoice property code is missing or not validated. Those rows cannot be approved until the invoice property is fixed.
+        {{ property_blocked_count }} row{{ property_blocked_count|pluralize }} on this page {{ property_blocked_count|pluralize:"is,are" }} flagged because the invoice property code is missing or not validated. Those rows cannot be approved <a href="{% url 'invoices:property_audit' %}">until the invoice property is fixed</a>.
     </div>
     {% endif %}
 
@@ -866,8 +829,8 @@
                             <p class="menu-title">Visible columns</p>
                             <p class="menu-help">Description, Approve as, and Accept stay pinned so the queue remains usable.</p>
                             <label class="menu-option"><input type="checkbox" data-col-toggle="invoice" checked> Invoice</label>
-                            <label class="menu-option"><input type="checkbox" data-col-toggle="amount" checked> Amount</label>
-                            <label class="menu-option"><input type="checkbox" data-col-toggle="suggestion" checked> Invoice GL</label>
+                            <label class="menu-option"><input type="checkbox" data-col-toggle="amount" checked> Total</label>
+                            <label class="menu-option"><input type="checkbox" data-col-toggle="suggestion" checked> Invoice GL Code</label>
                             <label class="menu-option"><input type="checkbox" data-col-toggle="confidence" checked> Confidence</label>
                         </div>
                     </div>
@@ -907,14 +870,14 @@
                                 </th>
                                 <th data-col-id="amount" class="{% if sort_col == 'amount' %}sorted{% endif %}">
                                     <a class="sort-link" href="?sort=amount&dir={% if sort_col == 'amount' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}">
-                                        Amount
+                                        Total
                                         {% if sort_col == 'amount' %}<span class="sort-arrow">{% if sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
                                     </a>
                                     <span class="resize-handle" data-resize-col="amount" aria-hidden="true"></span>
                                 </th>
                                 <th data-col-id="suggestion" class="{% if sort_col == 'gl' %}sorted{% endif %}">
                                     <a class="sort-link" href="?sort=gl&dir={% if sort_col == 'gl' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}">
-                                        Invoice GL
+                                        Invoice GL Code
                                         {% if sort_col == 'gl' %}<span class="sort-arrow">{% if sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>{% endif %}
                                     </a>
                                     <span class="resize-handle" data-resize-col="suggestion" aria-hidden="true"></span>
@@ -955,7 +918,7 @@
                                     {% endif %}
                                 </td>
                                 <td data-col-id="amount" class="amount-cell">
-                                    {% if item.line_total %}${{ item.line_total }}{% else %}&mdash;{% endif %}
+                                    {% if item.line_total %}${{ item.line_total|floatformat:2|intcomma }}{% else %}&mdash;{% endif %}
                                 </td>
                                 <td data-col-id="suggestion">
                                     {% if item.invoice_gl_code_hint %}
@@ -978,7 +941,7 @@
                                 </td>
                                 <td data-col-id="gl">
                                     {% if item.suggested_gl and item.invoice_gl_code_hint and item.suggested_gl.code != item.invoice_gl_code_hint %}
-                                    <span class="gl-diff-badge" title="Invoice says {{ item.invoice_gl_code_hint }}, model suggests {{ item.suggested_gl.code }}">⚠ ML override</span><br>
+                                    <span class="gl-diff-badge" title="Invoice says {{ item.invoice_gl_code_hint }}, model suggests {{ item.suggested_gl.code }}">⚠ Suggested Does Not Equal Invoice</span><br>
                                     {% endif %}
                                     <div class="gl-search">
                                         <input type="text" class="gl-input"

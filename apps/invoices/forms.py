@@ -3,6 +3,8 @@ from django import forms
 
 from .models import GLAccount, PropertyReference
 
+_MAX_PDF_SIZE = getattr(settings, "BULK_UPLOAD_MAX_FILE_SIZE_MB", 50) * 1024 * 1024
+
 
 class InvoiceUploadForm(forms.Form):
     invoice_pdf = forms.FileField(
@@ -64,16 +66,28 @@ class BulkInvoiceUploadForm(forms.Form):
                 f"You can upload up to {settings.BULK_UPLOAD_MAX_FILES} PDFs at once."
             )
 
-        invalid_files = [
-            uploaded_file.name
-            for uploaded_file in uploaded_files
-            if not uploaded_file.name.lower().endswith(".pdf")
-        ]
-        if invalid_files:
-            invalid_names = ", ".join(invalid_files)
-            raise forms.ValidationError(
-                f"Only PDF files are supported. Invalid files: {invalid_names}"
-            )
+        errors = []
+        for f in uploaded_files:
+            if not f.name.lower().endswith(".pdf"):
+                errors.append(f"{f.name}: only PDF files are supported.")
+                continue
+
+            if f.size and f.size > _MAX_PDF_SIZE:
+                mb = _MAX_PDF_SIZE // (1024 * 1024)
+                errors.append(f"{f.name}: file exceeds the {mb} MB limit ({f.size // (1024 * 1024)} MB).")
+                continue
+
+            # Magic byte check — catch files renamed to .pdf that aren't PDFs.
+            try:
+                header = f.read(4)
+                f.seek(0)
+                if header != b"%PDF":
+                    errors.append(f"{f.name}: does not appear to be a valid PDF file.")
+            except Exception:
+                f.seek(0)
+
+        if errors:
+            raise forms.ValidationError(errors)
 
         return uploaded_files
 

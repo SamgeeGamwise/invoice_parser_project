@@ -8,7 +8,7 @@ from pathlib import Path
 from django.contrib import messages
 from django.conf import settings
 from django.core.paginator import Paginator
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404, redirect, render
@@ -22,6 +22,7 @@ from .services.orchestrator import InvoiceProcessingService
 from .services.output_writer import InvoiceOutputWriterService
 from .services.reporting import ReportingService
 from .services.repository import InvoiceRepositoryService
+from .services.yardi_submit import YardiSubmitService
 
 
 def _display_path(path) -> str:
@@ -39,7 +40,112 @@ def _dashboard_context() -> dict:
     stats = reporting.dashboard_stats()
     total = stats["line_item_count"]
     review_pct = int((stats["ready_to_submit"] / total) * 100) if total else 0
-    return {"stats": stats, "review_pct": review_pct}
+    audit = _build_code_audit_context()
+    return {
+        "stats": stats,
+        "review_pct": review_pct,
+        "gl_account_count": GLAccount.objects.count(),
+        "property_reference_count": PropertyReference.objects.count(),
+        "gl_audit_missing_count": audit["gl_audit_missing_count"],
+        "gl_audit_missing_invoices": audit["gl_audit_missing_invoices"],
+        "property_audit_missing_count": audit["property_audit_missing_count"],
+        "property_audit_missing_invoices": audit["property_audit_missing_invoices"],
+        "total_audit_issues": (
+            audit["gl_audit_missing_count"] + audit["property_audit_missing_count"]
+        ),
+    }
+
+
+def _build_code_audit_context() -> dict:
+    gl_accounts = {account.code: account for account in GLAccount.objects.order_by("code")}
+    gl_rows_by_code: dict[str, dict] = {}
+    for row in (
+        Invoice.objects.exclude(invoice_gl_code="")
+        .values("invoice_gl_code", "invoice_gl_description")
+        .annotate(invoice_count=Count("id"))
+        .order_by("invoice_gl_code", "invoice_gl_description")
+    ):
+        code = (row["invoice_gl_code"] or "").strip()
+        if not code:
+            continue
+        bucket = gl_rows_by_code.setdefault(
+            code,
+            {
+                "code": code,
+                "invoice_count": 0,
+                "descriptions": [],
+                "matched_account": gl_accounts.get(code),
+            },
+        )
+        bucket["invoice_count"] += row["invoice_count"]
+        description = (row["invoice_gl_description"] or "").strip()
+        if description and description not in bucket["descriptions"]:
+            bucket["descriptions"].append(description)
+
+    gl_audit_rows = sorted(gl_rows_by_code.values(), key=lambda row: row["code"])
+    unmatched_gl_rows = [
+        row for row in gl_audit_rows if row["matched_account"] is None
+    ]
+
+    property_rows_by_code: dict[str, dict] = {}
+    for row in (
+        Invoice.objects.values(
+            "property_code_raw",
+            "property_code_normalized",
+            "property_reference_id",
+        )
+        .annotate(invoice_count=Count("id"))
+        .order_by("property_code_normalized", "property_code_raw")
+    ):
+        raw_value = (row["property_code_raw"] or "").strip()
+        normalized = (row["property_code_normalized"] or "").strip().upper()
+        audit_code = normalized or raw_value.upper()
+        bucket = property_rows_by_code.setdefault(
+            audit_code,
+            {
+                "audit_code": audit_code,
+                "display_code": audit_code or "(blank)",
+                "invoice_count": 0,
+                "raw_variants": [],
+                "normalized_variants": [],
+                "matched": False,
+            },
+        )
+        bucket["invoice_count"] += row["invoice_count"]
+        if raw_value and raw_value not in bucket["raw_variants"]:
+            bucket["raw_variants"].append(raw_value)
+        if normalized and normalized not in bucket["normalized_variants"]:
+            bucket["normalized_variants"].append(normalized)
+        bucket["matched"] = bucket["matched"] or bool(row["property_reference_id"])
+
+    property_audit_rows = sorted(
+        property_rows_by_code.values(),
+        key=lambda row: (row["display_code"] == "(blank)", row["display_code"]),
+    )
+    unmatched_property_rows = [
+        row for row in property_audit_rows if not row["matched"]
+    ]
+
+    return {
+        "gl_audit_rows": gl_audit_rows,
+        "unmatched_gl_rows": unmatched_gl_rows,
+        "gl_audit_total_codes": len(gl_audit_rows),
+        "gl_audit_missing_count": len(unmatched_gl_rows),
+        "gl_audit_missing_invoices": sum(row["invoice_count"] for row in unmatched_gl_rows),
+        "gl_audit_blank_invoices": Invoice.objects.filter(
+            Q(invoice_gl_code="") | Q(invoice_gl_code__isnull=True)
+        ).count(),
+        "property_audit_rows": property_audit_rows,
+        "unmatched_property_rows": unmatched_property_rows,
+        "property_audit_total_codes": len(property_audit_rows),
+        "property_audit_missing_count": len(unmatched_property_rows),
+        "property_audit_missing_invoices": sum(
+            row["invoice_count"] for row in unmatched_property_rows
+        ),
+        "property_audit_blank_invoices": Invoice.objects.filter(
+            Q(property_code_normalized="") | Q(property_code_normalized__isnull=True)
+        ).count(),
+    }
 
 
 def dashboard_view(request: HttpRequest) -> HttpResponse:
@@ -61,6 +167,7 @@ def bulk_upload_view(request: HttpRequest) -> HttpResponse:
                     "max_files": settings.BULK_UPLOAD_MAX_FILES,
                 })
             progress_q: queue.Queue = queue.Queue()
+            stop_event = threading.Event()
 
             def run():
                 try:
@@ -69,6 +176,9 @@ def bulk_upload_view(request: HttpRequest) -> HttpResponse:
                     writer = InvoiceOutputWriterService()
 
                     def on_progress(current, total, filename, status):
+                        # Stop feeding the queue if the client disconnected.
+                        if stop_event.is_set():
+                            raise InterruptedError("Client disconnected; processing cancelled.")
                         progress_q.put({
                             "type": "progress",
                             "current": current,
@@ -78,6 +188,9 @@ def bulk_upload_view(request: HttpRequest) -> HttpResponse:
                         })
 
                     result = processor.bulk_process(files, progress_callback=on_progress)
+
+                    if stop_event.is_set():
+                        return  # client left; skip the DB write
 
                     progress_q.put({"type": "saving"})
                     repository.save_parsed_invoices(result.invoices)
@@ -90,19 +203,29 @@ def bulk_upload_view(request: HttpRequest) -> HttpResponse:
                         "error_list": result.errors[:20],
                         "output_path": _display_path(output_path),
                     })
+                except InterruptedError:
+                    pass  # clean cancellation, nothing to report
                 except Exception as exc:
                     progress_q.put({"type": "fatal", "error": str(exc)})
                 finally:
-                    progress_q.put(None)  # sentinel
+                    progress_q.put(None)  # sentinel always fires
 
             threading.Thread(target=run, daemon=True).start()
 
             def generate():
-                while True:
-                    item = progress_q.get()
-                    if item is None:
-                        break
-                    yield f"data: {json.dumps(item)}\n\n"
+                try:
+                    while True:
+                        try:
+                            item = progress_q.get(timeout=120)  # 2-min timeout per event
+                        except queue.Empty:
+                            yield 'data: {"type":"fatal","error":"Processing timed out. Please try again."}\n\n'
+                            break
+                        if item is None:
+                            break
+                        yield f"data: {json.dumps(item)}\n\n"
+                except GeneratorExit:
+                    # Client closed the connection (refresh, navigation, etc.)
+                    stop_event.set()
 
             response = StreamingHttpResponse(generate(), content_type="text/event-stream")
             response["Cache-Control"] = "no-cache"
@@ -130,7 +253,7 @@ def invoice_detail_view(request: HttpRequest, invoice_id: int) -> HttpResponse:
         ),
         pk=invoice_id,
     )
-    gl_accounts = list(GLAccount.objects.filter(in_review_range=True).order_by("code"))
+    gl_accounts = list(GLAccount.objects.order_by("code"))
     fix_property_form = PropertyReferenceForm(
         initial={
             "code": invoice.property_code_normalized or invoice.property_code_raw or "",
@@ -231,27 +354,42 @@ def invoice_detail_view(request: HttpRequest, invoice_id: int) -> HttpResponse:
     })
 
 
+_REPORTS_GL_DEFAULT = 30
+_REPORTS_PROP_DEFAULT = 30
+
+
 def reports_view(request: HttpRequest) -> HttpResponse:
     """Spend breakdown by GL code and property."""
     reporting = ReportingService()
-    spend_by_gl = reporting.spend_by_gl()
+    show_all_gl = request.GET.get("gl") == "all"
+    show_all_prop = request.GET.get("prop") == "all"
 
-    # Calculate bar widths for the CSS chart (relative to the largest amount).
-    if spend_by_gl:
-        max_amount = max(row["total_amount"] for row in spend_by_gl)
-        for row in spend_by_gl:
+    spend_by_gl_all = reporting.spend_by_gl()
+    gl_total_count = len(spend_by_gl_all)
+    if spend_by_gl_all:
+        max_amount = max(row["total_amount"] for row in spend_by_gl_all)
+        for row in spend_by_gl_all:
             row["bar_pct"] = int((row["total_amount"] / max_amount) * 100) if max_amount else 0
+    spend_by_gl = spend_by_gl_all if show_all_gl else spend_by_gl_all[:_REPORTS_GL_DEFAULT]
 
-    items_by_property = reporting.items_by_property()
-    if items_by_property:
-        max_prop = max(row["total_amount"] for row in items_by_property)
-        for row in items_by_property:
+    items_by_property_all = reporting.items_by_property()
+    prop_total_count = len(items_by_property_all)
+    if items_by_property_all:
+        max_prop = max(row["total_amount"] for row in items_by_property_all)
+        for row in items_by_property_all:
             row["bar_pct"] = int((row["total_amount"] / max_prop) * 100) if max_prop else 0
+    items_by_property = items_by_property_all if show_all_prop else items_by_property_all[:_REPORTS_PROP_DEFAULT]
 
     return render(request, "invoices/reports.html", {
         "stats": reporting.dashboard_stats(),
         "spend_by_gl": spend_by_gl,
+        "gl_total_count": gl_total_count,
+        "gl_showing_all": show_all_gl,
+        "gl_default_cap": _REPORTS_GL_DEFAULT,
         "items_by_property": items_by_property,
+        "prop_total_count": prop_total_count,
+        "prop_showing_all": show_all_prop,
+        "prop_default_cap": _REPORTS_PROP_DEFAULT,
     })
 
 
@@ -406,7 +544,7 @@ def review_queue_view(request: HttpRequest) -> HttpResponse:
 
     property_blocked_count = sum(1 for item in page_obj if not item.has_valid_property)
     item_ids_csv = ",".join(str(item.pk) for item in page_obj)
-    gl_accounts = list(GLAccount.objects.filter(in_review_range=True).order_by("code"))
+    gl_accounts = list(GLAccount.objects.order_by("code"))
 
     return render(request, "invoices/review_queue.html", {
         "page_obj": page_obj,
@@ -525,52 +663,71 @@ def reference_data_view(request: HttpRequest) -> HttpResponse:
 
 
 def property_audit_view(request: HttpRequest) -> HttpResponse:
-    """Diagnostic: shows every raw property code found on invoices and how it resolved."""
-    from collections import defaultdict
-    from django.db.models import Count
+    """Interactive audit step for missing GL and property codes found on invoices."""
+    gl_form = GLAccountForm(prefix="audit_gl")
+    property_form = PropertyReferenceForm(prefix="audit_property")
+    open_modal = ""
 
-    # All unique (raw, normalized, reference) combos with invoice counts
-    combos = list(
-        Invoice.objects
-        .values("property_code_raw", "property_code_normalized", "property_reference_id")
-        .annotate(count=Count("id"))
-        .order_by("property_code_raw", "property_code_normalized")
-    )
+    if request.method == "POST":
+        action = request.POST.get("action", "")
 
-    # Group raw codes case-insensitively so "ssoh" and "SSOH" collapse together.
-    raw_groups: dict = defaultdict(list)
-    for row in combos:
-        raw_key = (row["property_code_raw"] or "").strip().upper()
-        raw_groups[raw_key].append(row)
+        if action == "create_gl_from_audit":
+            gl_form = GLAccountForm(request.POST, prefix="audit_gl")
+            open_modal = "gl"
+            if gl_form.is_valid():
+                record = gl_form.save()
+                messages.success(request, f"Added GL code {record.code} from invoice audit.")
+                return redirect("invoices:property_audit")
 
-    invoice_groups = []
-    for raw, entries in sorted(raw_groups.items(), key=lambda x: (x[0] or "")):
-        normalized_set = sorted({e["property_code_normalized"] for e in entries if e["property_code_normalized"]})
-        invoice_groups.append({
-            "raw": raw or "(blank)",
-            "total": sum(e["count"] for e in entries),
-            "normalized_set": normalized_set,
-            "matched": any(e["property_reference_id"] for e in entries),
-            "inconsistent": len(normalized_set) > 1,
-        })
+        elif action == "create_property_from_audit":
+            property_form = PropertyReferenceForm(request.POST, prefix="audit_property")
+            open_modal = "property"
+            audit_code = (request.POST.get("audit_code") or "").strip().upper()
+            if property_form.is_valid():
+                record = property_form.save()
+                updated = Invoice.objects.filter(
+                    property_code_normalized=audit_code,
+                    property_reference__isnull=True,
+                ).update(property_reference=record)
+                messages.success(
+                    request,
+                    f"Added property {record.code} and linked {updated} invoice(s) from audit code {audit_code or '(blank)'}.",
+                )
+                return redirect("invoices:property_audit")
 
-    # All known PropertyReferences annotated with how many invoices they received
-    references = list(
-        PropertyReference.objects
-        .annotate(invoice_count=Count("invoices"))
-        .order_by("code")
-    )
+        elif action == "assign_property_from_audit":
+            audit_code = (request.POST.get("audit_code") or "").strip().upper()
+            property_reference_id = request.POST.get("property_reference_id", "").strip()
+            property_reference = PropertyReference.objects.filter(pk=property_reference_id).first()
+            if not audit_code:
+                messages.error(request, "Blank property codes cannot be linked automatically.")
+                return redirect("invoices:property_audit")
+            if property_reference is None:
+                messages.error(request, "Choose a property to link before saving.")
+                return redirect("invoices:property_audit")
+            updated = Invoice.objects.filter(
+                property_code_normalized=audit_code,
+                property_reference__isnull=True,
+            ).update(property_reference=property_reference)
+            messages.success(
+                request,
+                f"Linked {updated} invoice(s) with property code {audit_code} to {property_reference.code}.",
+            )
+            return redirect("invoices:property_audit")
 
-    total = Invoice.objects.count()
-    matched = Invoice.objects.filter(property_reference__isnull=False).count()
-
-    return render(request, "invoices/property_audit.html", {
-        "invoice_groups": invoice_groups,
-        "references": references,
-        "total_invoices": total,
-        "matched_invoices": matched,
-        "unmatched_invoices": total - matched,
+    context = _build_code_audit_context()
+    context.update({
+        "gl_form": gl_form,
+        "property_form": property_form,
+        "property_references": PropertyReference.objects.order_by("code"),
+        "total_invoices": Invoice.objects.count(),
+        "matched_property_invoices": Invoice.objects.filter(property_reference__isnull=False).count(),
+        "open_modal": open_modal,
     })
+    context["unmatched_property_invoices"] = (
+        context["total_invoices"] - context["matched_property_invoices"]
+    )
+    return render(request, "invoices/property_audit.html", context)
 
 
 def gl_codes_view(request: HttpRequest) -> HttpResponse:
@@ -628,10 +785,13 @@ def gl_codes_view(request: HttpRequest) -> HttpResponse:
                 messages.success(request, f"Deleted GL code {code}.")
             return redirect("invoices:gl_codes")
 
+    audit = _build_code_audit_context()
     return render(request, "invoices/gl_codes.html", {
         "gl_accounts": GLAccount.objects.order_by("code"),
         "gl_form": gl_form,
         "gl_edit_id": gl_edit_id,
+        "gl_audit_missing_count": audit["gl_audit_missing_count"],
+        "gl_audit_missing_invoices": audit["gl_audit_missing_invoices"],
     })
 
 
@@ -689,11 +849,72 @@ def properties_view(request: HttpRequest) -> HttpResponse:
                 messages.success(request, f"Deleted property {code}.")
             return redirect("invoices:properties")
 
+    audit = _build_code_audit_context()
     return render(request, "invoices/properties.html", {
         "property_references": PropertyReference.objects.order_by("code"),
         "prop_form": prop_form,
         "prop_edit_id": prop_edit_id,
+        "property_audit_missing_count": audit["property_audit_missing_count"],
+        "property_audit_missing_invoices": audit["property_audit_missing_invoices"],
     })
+
+
+def yardi_submit_view(request: HttpRequest) -> HttpResponse:
+    """Preview and confirm a Yardi submission.
+
+    GET  — shows which invoices are ready and which are incomplete.
+    POST — runs the submission: writes JSON + audit CSV, deletes submitted
+           invoices, and renders the success summary.
+    """
+    service = YardiSubmitService()
+
+    if request.method == "POST":
+        try:
+            result = service.submit()
+        except (ValueError, RuntimeError) as exc:
+            messages.error(request, str(exc))
+            return redirect("invoices:yardi_submit")
+        return render(request, "invoices/yardi_submitted.html", {
+            "result": result,
+            "json_filename": result.json_path.name,
+            "audit_filename": result.audit_path.name,
+            "json_path_display": _display_path(result.json_path),
+            "audit_path_display": _display_path(result.audit_path),
+        })
+
+    preview = service.preview()
+    return render(request, "invoices/yardi_submit.html", preview)
+
+
+def yardi_download_view(request: HttpRequest, filename: str) -> HttpResponse:
+    """Stream a previously generated submission file as a download.
+
+    Only files in OUTPUT_DIR are served; path traversal is rejected.
+    """
+    import mimetypes
+    output_dir = settings.OUTPUT_DIR
+    target = (output_dir / filename).resolve()
+
+    # Safety: ensure the resolved path is still inside OUTPUT_DIR
+    try:
+        target.relative_to(output_dir.resolve())
+    except ValueError:
+        from django.http import Http404
+        raise Http404
+
+    if not target.exists():
+        from django.http import Http404
+        raise Http404
+
+    content_type, _ = mimetypes.guess_type(str(target))
+    content_type = content_type or "application/octet-stream"
+
+    response = HttpResponse(content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="{target.name}"'
+    response["Content-Length"] = target.stat().st_size
+    with target.open("rb") as fh:
+        response.write(fh.read())
+    return response
 
 
 def clear_data_view(request: HttpRequest) -> HttpResponse:

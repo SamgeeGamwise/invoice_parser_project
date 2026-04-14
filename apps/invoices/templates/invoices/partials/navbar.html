@@ -1,0 +1,21 @@
+{% with current=request.resolver_match.url_name %}
+<nav class="site-nav">
+    <a class="brand">Invoice Parser</a>
+    <a href="{% url 'invoices:dashboard' %}"{% if current == "dashboard" %} class="active"{% endif %}>Dashboard</a>
+    <a href="{% url 'invoices:bulk_upload' %}"{% if current == "bulk_upload" %} class="active"{% endif %}>Upload</a>
+    <a href="{% url 'invoices:review_queue' %}"{% if current == "review_queue" %} class="active"{% endif %}>Approval Queue</a>
+    <a href="{% url 'invoices:reports' %}"{% if current == "reports" %} class="active"{% endif %}>Reports</a>
+    <a href="{% url 'invoices:yardi_submit' %}"{% if current == "yardi_submit" %} class="active"{% endif %}>Submit</a>
+    <details class="nav-dropdown{% if current == 'gl_codes' or current == 'properties' %} active{% endif %}"{% if current == 'gl_codes' or current == 'properties' %} open{% endif %}>
+        <summary>Setup</summary>
+        <div class="nav-menu">
+            <a href="{% url 'invoices:gl_codes' %}"{% if current == "gl_codes" %} class="active"{% endif %}>GL Codes</a>
+            <a href="{% url 'invoices:properties' %}"{% if current == "properties" %} class="active"{% endif %}>Properties</a>
+        </div>
+    </details>
+    <a href="{% url 'invoices:property_audit' %}"{% if current == "property_audit" %} class="active"{% endif %}>Code Audit</a>
+    {% if debug %}
+    <a href="{% url 'invoices:clear_data' %}" class="nav-debug{% if current == 'clear_data' %} active{% endif %}">Clear Data</a>
+    {% endif %}
+</nav>
+{% endwith %}

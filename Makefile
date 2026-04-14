@@ -21,6 +21,9 @@ import-reference-data: ## Import GL accounts and property references from the Ex
 reset:         ## Wipe all data including GL codes and property references (debug reset)
 	$(MANAGE) clear_data --yes --all
 
+clear-history: ## Clear all GL approvals (resets KNN history) while keeping invoices and reference data
+	$(PYTHON) -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); django.setup(); from apps.invoices.models import InvoiceLineItem; n = InvoiceLineItem.objects.filter(approved_gl__isnull=False).update(approved_gl=None, reviewed_at=None); print(f'Cleared {n} approval(s).')"
+
 # ── Setup ────────────────────────────────────────────────────────────────────
 
 install:       ## Create venv and install dependencies
@@ -35,5 +38,5 @@ help:          ## List all available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: run migrate migrations import-reference-data reset install setup help
+.PHONY: run migrate migrations import-reference-data reset clear-history install setup help
 .DEFAULT_GOAL := help

@@ -19,6 +19,22 @@ class InvoiceRepositoryService:
         saved_invoices: list[Invoice] = []
 
         for parsed_invoice in parsed_invoices:
+            # Warn if re-uploading an invoice that already has human approvals.
+            # update_or_create will overwrite the invoice and clear line items below,
+            # which would destroy approval work.  Set status so the caller can surface it.
+            existing = Invoice.objects.filter(
+                invoice_number=parsed_invoice.invoice_number
+            ).first()
+            if existing:
+                has_approvals = existing.line_items.filter(
+                    approved_gl__isnull=False
+                ).exists()
+                if has_approvals:
+                    parsed_invoice.status = (
+                        f"Re-uploaded (previously had approvals — they have been reset). "
+                        f"Original: {parsed_invoice.status}"
+                    )
+
             property_match = self.reference_data.match_property_code(
                 parsed_invoice.property_code_normalized or parsed_invoice.property_code_raw
             )

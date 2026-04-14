@@ -395,8 +395,107 @@ class DashboardViewTests(TestCase):
         response = self.client.get(reverse("invoices:property_audit"))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Code Audit")
         self.assertContains(response, "<span class=\"code\">SSOH</span>", html=True)
         self.assertContains(response, "<span class=\"count\">2</span>", html=True)
+
+    def test_property_audit_surfaces_missing_gl_codes(self) -> None:
+        Invoice.objects.create(
+            invoice_number="INV-GL-AUDIT",
+            invoice_gl_code="6999",
+            invoice_gl_description="UNMAPPED GL",
+            property_code_raw="ssoh",
+            property_code_normalized="SSOH",
+        )
+
+        response = self.client.get(reverse("invoices:property_audit"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "GL Code Audit")
+        self.assertContains(response, "6999")
+        self.assertContains(response, "UNMAPPED GL")
+
+    def test_property_audit_can_create_gl_code(self) -> None:
+        Invoice.objects.create(
+            invoice_number="INV-GL-CREATE",
+            invoice_gl_code="6999",
+            invoice_gl_description="UNMAPPED GL",
+            property_code_raw="ssoh",
+            property_code_normalized="SSOH",
+        )
+
+        response = self.client.post(
+            reverse("invoices:property_audit"),
+            {
+                "action": "create_gl_from_audit",
+                "audit_gl-code": "6999",
+                "audit_gl-description": "UNMAPPED GL",
+                "audit_gl-in_review_range": "on",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(GLAccount.objects.filter(code="6999", description="UNMAPPED GL").exists())
+        self.assertContains(response, "Added GL code 6999")
+
+    def test_property_audit_can_create_property_and_link_invoices(self) -> None:
+        invoice = InvoiceRepositoryService().save_parsed_invoices([
+            self._build_parsed_invoice(
+                invoice_number="INV-PROP-AUDIT",
+                property_code_raw="zz99",
+                property_code_normalized="ZZ99",
+                property_code_validated=False,
+            )
+        ])[0]
+
+        response = self.client.post(
+            reverse("invoices:property_audit"),
+            {
+                "action": "create_property_from_audit",
+                "audit_code": "ZZ99",
+                "audit_property-code": "ZZ99",
+                "audit_property-website_id": "9001",
+                "audit_property-display_name": "Audit Created Property",
+            },
+            follow=True,
+        )
+
+        invoice.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(invoice.property_reference)
+        self.assertEqual(invoice.property_reference.code, "ZZ99")
+        self.assertContains(response, "Added property ZZ99")
+
+    def test_property_audit_can_link_invoices_to_existing_property(self) -> None:
+        target = PropertyReference.objects.create(
+            code="LINKED",
+            website_id="4444",
+            display_name="Linked Property",
+        )
+        invoice = InvoiceRepositoryService().save_parsed_invoices([
+            self._build_parsed_invoice(
+                invoice_number="INV-PROP-LINK",
+                property_code_raw="alias",
+                property_code_normalized="ALIAS",
+                property_code_validated=False,
+            )
+        ])[0]
+
+        response = self.client.post(
+            reverse("invoices:property_audit"),
+            {
+                "action": "assign_property_from_audit",
+                "audit_code": "ALIAS",
+                "property_reference_id": str(target.id),
+            },
+            follow=True,
+        )
+
+        invoice.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(invoice.property_reference_id, target.id)
+        self.assertContains(response, "Linked 1 invoice")
 
     def test_ajax_approve_rejects_missing_property(self) -> None:
         invoice = InvoiceRepositoryService().save_parsed_invoices([

@@ -5,8 +5,9 @@ from ..schemas import GLSuggestion, InvoiceLineItem as ParsedLineItem
 from . import embedding_classifier
 
 _cfg = settings.ML_CONFIG
-_EMBEDDING_WEIGHT  = _cfg["EMBEDDING_WEIGHT"]
-_INVOICE_GL_PRIOR  = _cfg["INVOICE_GL_PRIOR"]
+_EMBEDDING_WEIGHT    = _cfg["EMBEDDING_WEIGHT"]
+_INVOICE_GL_PRIOR    = _cfg["INVOICE_GL_PRIOR"]
+_REVIEW_RANGE_WEIGHT = _cfg["REVIEW_RANGE_WEIGHT"]
 
 
 class LineItemGLClassifierService:
@@ -14,17 +15,15 @@ class LineItemGLClassifierService:
         if line_item.item_type in ("discount", "shipping"):
             return self._non_product_suggestions(line_item, invoice_gl_code, "Non-product line defaulted to invoice-level GL.")
 
-        candidates = list(GLAccount.objects.filter(in_review_range=True).order_by("code"))
+        # All GL accounts are candidates — in_review_range no longer gates eligibility.
+        candidates = list(GLAccount.objects.order_by("code"))
 
         # Signal 1 (static): semantic similarity against GL account descriptions.
-        # Does not improve with use — both the model and GL descriptions are fixed.
         gl_embedding_scores = embedding_classifier.score_description_against_gl(
             line_item.description, candidates
         )
 
         # Signal 2 (grows with use): KNN vote over all previously approved items.
-        # Every human approval adds a training point — this becomes the dominant
-        # signal as the approval history grows.
         knn_votes = embedding_classifier.score_against_approved_history(
             line_item.description
         )
@@ -36,10 +35,15 @@ class LineItemGLClassifierService:
             reasons: list[str] = []
 
             # Strong prior: invoice-level GL code.
-            # Default choice — other signals must overcome it.
             if invoice_gl_code and account.code == invoice_gl_code:
                 score += _INVOICE_GL_PRIOR
                 reasons.append("Matches the GL code recorded on the invoice.")
+
+            # Small-to-medium prior: frequently-used range codes get a gentle boost.
+            # Does not override the invoice GL or strong embedding/KNN signals.
+            if account.in_review_range:
+                score += _REVIEW_RANGE_WEIGHT
+                reasons.append("In the commonly-used GL range.")
 
             # Static embedding: semantic similarity between line item and GL description.
             gl_sim = gl_embedding_scores.get(account.code, 0.0)
@@ -51,7 +55,6 @@ class LineItemGLClassifierService:
                 )
 
             # KNN history: vote from similar previously-approved items.
-            # Strengthens with every human approval.
             knn_vote = knn_votes.get(account.code, 0.0)
             if knn_vote > 0.0:
                 knn_contribution = round(knn_vote * _EMBEDDING_WEIGHT, 2)

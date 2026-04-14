@@ -13,6 +13,8 @@ from .views import (
     reports_view,
     results_view,
     review_queue_view,
+    yardi_download_view,
+    yardi_submit_view,
 )
 
 
@@ -31,4 +33,6 @@ urlpatterns = [
     path("reference-data/", reference_data_view, name="reference_data"),
     path("property-audit/", property_audit_view, name="property_audit"),
     path("clear-data/", clear_data_view, name="clear_data"),
+    path("yardi-submit/", yardi_submit_view, name="yardi_submit"),
+    path("yardi-submit/download/<str:filename>/", yardi_download_view, name="yardi_download"),
 ]

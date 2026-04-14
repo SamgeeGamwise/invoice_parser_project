@@ -13,13 +13,7 @@
         }
         body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
 
-        nav {
-            background: var(--surface); border-bottom: 1px solid var(--border);
-            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
-        }
-        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
-        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-        nav a:hover, nav a.active { color: var(--blue); }
+        {% include "invoices/partials/navbar_styles.html" %}
 
         main { max-width: 680px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
 
@@ -155,16 +149,7 @@
 </head>
 <body>
 
-<nav>
-    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
-    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}" class="active">Upload</a>
-    <a href="{% url 'invoices:review_queue' %}">Approval Queue</a>
-    <a href="{% url 'invoices:reports' %}">Reports</a>
-    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
-    <a href="{% url 'invoices:properties' %}">Properties</a>
-    <a href="{% url 'invoices:property_audit' %}">Code Audit</a>
-</nav>
+{% include "invoices/partials/navbar.html" %}
 
 <!-- Loading overlay -->
 <div class="loading-overlay" id="loading-overlay">
@@ -187,16 +172,10 @@
 <main>
     <div class="card">
         <h1>Upload Invoices</h1>
-        <p>
-            Select multiple Amazon invoice PDFs at once. We'll parse them all, suggest
-            GL codes for each line item, save everything to the database, and export
-            a JSON snapshot you can share or import elsewhere.
-        </p>
+        <p>Select one or more Amazon invoice PDFs. Files are parsed, GL codes are suggested, and results are saved to the database.</p>
 
         <div class="info-box">
-            <strong>What happens after you click upload?</strong>
-            A progress screen will appear while we process your files. Results are shown
-            automatically when everything is done.
+            After upload, go to <strong>Code Audit</strong> to resolve any unmatched GL or property codes, then proceed to the <strong>Approval Queue</strong>.
         </div>
 
         {% if form.errors %}
@@ -348,7 +327,8 @@
                 ${evt.errors > 0 ? `<p style="font-size:0.82rem;color:var(--red);margin:0 0 0.5rem;">${evt.error_list.map(e => e.filename).join(", ")}</p>` : ""}
                 <p style="font-size:0.8rem;color:var(--muted);margin:0 0 1rem;">JSON saved to: ${evt.output_path}</p>
                 <div class="done-actions">
-                    <a class="btn btn-primary" href="{% url 'invoices:review_queue' %}">Go to Review Queue</a>
+                    <a class="btn btn-primary" href="{% url 'invoices:property_audit' %}">Go to Code Audit</a>
+                    <a class="btn btn-outline" href="{% url 'invoices:review_queue' %}">Approval Queue</a>
                     <a class="btn btn-outline" href="{% url 'invoices:dashboard' %}">Dashboard</a>
                 </div>
             `;

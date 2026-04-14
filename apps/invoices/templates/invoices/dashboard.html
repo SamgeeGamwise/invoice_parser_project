@@ -1,3 +1,4 @@
+{% load humanize %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,18 +24,7 @@
         body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
 
         /* ── Nav ── */
-        nav {
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-            padding: 0 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 2rem;
-            height: 56px;
-        }
-        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
-        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-        nav a:hover, nav a.active { color: var(--blue); }
+        {% include "invoices/partials/navbar_styles.html" %}
 
         /* ── Layout ── */
         main { max-width: 1140px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
@@ -157,30 +147,98 @@
         }
         .empty-state .icon { font-size: 2.5rem; display: block; margin-bottom: 0.5rem; }
         .empty-state strong { display: block; color: var(--text); margin-bottom: 0.4rem; font-size: 1rem; }
+        .workflow-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+        }
+        .workflow-card {
+            text-decoration: none;
+            display: block;
+            min-width: 0;
+        }
+        .workflow-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.9rem;
+            height: 1.9rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            background: #eff6ff;
+            color: var(--blue);
+            margin-bottom: 0.7rem;
+        }
+        .workflow-meta {
+            margin-top: 0.8rem;
+            font-size: 0.82rem;
+            color: var(--muted);
+        }
+        .workflow-card-static {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            grid-column: span 2;
+        }
+        .setup-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            width: 100%;
+            margin-top: 1rem;
+        }
+        .setup-link {
+            display: block;
+            padding: 0.9rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: #f8fafc;
+            text-decoration: none;
+            transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+        }
+        .setup-link:hover {
+            border-color: #bfdbfe;
+            background: #eff6ff;
+            text-decoration: none;
+            transform: translateY(-1px);
+        }
+        .setup-link-title {
+            display: block;
+            margin-bottom: 0.2rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .setup-link-copy {
+            display: block;
+            font-size: 0.84rem;
+            color: var(--muted);
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+        @media (max-width: 980px) {
+            .workflow-card-static {
+                grid-column: span 1;
+            }
+        }
+        @media (max-width: 680px) {
+            .setup-actions {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
 
-<nav>
-    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
-    <a href="{% url 'invoices:dashboard' %}" class="active">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
-    <a href="{% url 'invoices:review_queue' %}">Approval Queue</a>
-    <a href="{% url 'invoices:reports' %}">Reports</a>
-    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
-    <a href="{% url 'invoices:properties' %}">Properties</a>
-    <a href="{% url 'invoices:property_audit' %}">Code Audit</a>
-    {% if debug %}
-    <a href="{% url 'invoices:clear_data' %}" style="margin-left: auto; color: #dc2626; font-size: 0.85rem;">Clear Data</a>
-    {% endif %}
-</nav>
+{% include "invoices/partials/navbar.html" %}
 
 <main>
 
     <!-- Stats -->
     <section class="card">
         <h1>Dashboard</h1>
-        <p>Track your batch status and submit approved invoices to Yardi.</p>
+        <p>Current batch status. Work left to right through the workflow steps below.</p>
 
         <div class="stats">
             <div class="stat stat-blue">
@@ -201,7 +259,7 @@
             </div>
             <div class="stat stat-gray">
                 <span class="stat-label">Grand Total</span>
-                <span class="stat-value">${{ stats.total_amount|floatformat:2 }}</span>
+                <span class="stat-value">${{ stats.total_amount|floatformat:2|intcomma }}</span>
             </div>
         </div>
 
@@ -215,17 +273,56 @@
         {% endif %}
     </section>
 
-    <!-- Quick actions -->
-    <div class="grid-2">
-        <a class="card" href="{% url 'invoices:bulk_upload' %}" style="text-decoration:none; display:block;">
-            <h2 style="margin-bottom:0.3rem;">Upload Invoices</h2>
-            <p>Add one or more PDF invoices to the current batch.</p>
-        </a>
-        <a class="card" href="{% url 'invoices:review_queue' %}" style="text-decoration:none; display:block;">
-            <h2 style="margin-bottom:0.3rem;">Approval Queue</h2>
-            <p>Review and approve GL code assignments before submitting to Yardi.</p>
-        </a>
-    </div>
+    <section class="card">
+        <h2>Workflow</h2>
+        <div class="workflow-grid">
+
+            <a class="card workflow-card" href="{% url 'invoices:bulk_upload' %}">
+                <span class="workflow-number">1</span>
+                <h2 style="margin-bottom:0.3rem;">Upload</h2>
+                <p>Parse invoice PDFs and load them into the batch.</p>
+                <div class="workflow-meta">{{ stats.invoice_count }} invoice{{ stats.invoice_count|pluralize }} in batch</div>
+            </a>
+            <a class="card workflow-card" href="{% url 'invoices:property_audit' %}">
+                <span class="workflow-number">2</span>
+                <h2 style="margin-bottom:0.3rem;">Code Audit</h2>
+                <p>Resolve unmatched GL and property codes.</p>
+                <div class="workflow-meta">
+                    {% if total_audit_issues %}{{ total_audit_issues }} open issue{{ total_audit_issues|pluralize }}
+                    {% else %}Clean{% endif %}
+                </div>
+            </a>
+            <a class="card workflow-card" href="{% url 'invoices:review_queue' %}">
+                <span class="workflow-number">3</span>
+                <h2 style="margin-bottom:0.3rem;">Approval Queue</h2>
+                <p>Assign and approve GL codes for each line item.</p>
+                <div class="workflow-meta">
+                    {% if stats.pending_review_count %}{{ stats.pending_review_count }} item{{ stats.pending_review_count|pluralize }} pending
+                    {% else %}All approved{% endif %}
+                </div>
+            </a>
+            <a class="card workflow-card" href="{% url 'invoices:reports' %}">
+                <span class="workflow-number">4</span>
+                <h2 style="margin-bottom:0.3rem;">Reports</h2>
+                <p>Review spend by GL code and property.</p>
+                <div class="workflow-meta">{{ stats.ready_to_submit }} item{{ stats.ready_to_submit|pluralize }} ready</div>
+            </a>
+            <a class="card workflow-card" href="{% url 'invoices:yardi_submit' %}">
+                <span class="workflow-number">5</span>
+                <h2 style="margin-bottom:0.3rem;">Submit to Yardi</h2>
+                <p>Generate upload JSON and audit CSV. Submitted invoices are removed from the batch.</p>
+                <div class="workflow-meta">
+                    {% if stats.pending_review_count == 0 and stats.invoice_count > 0 %}
+                    <span style="color: var(--green); font-weight: 600;">Ready</span>
+                    {% elif stats.pending_review_count %}
+                    {{ stats.pending_review_count }} item{{ stats.pending_review_count|pluralize }} still pending
+                    {% else %}
+                    No invoices in batch
+                    {% endif %}
+                </div>
+            </a>
+        </div>
+    </section>
 
 </main>
 

@@ -1,0 +1,166 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invoice Parser &mdash; Submit to Yardi</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
+            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
+            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
+        }
+        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+
+        {% include "invoices/partials/navbar_styles.html" %}
+
+        main { max-width: 900px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
+
+        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+        h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+        p  { margin: 0.35rem 0; color: var(--muted); font-size: 0.92rem; }
+
+        /* Summary tiles */
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin: 1.25rem 0;
+        }
+        .tile { border-radius: 10px; padding: 1rem; }
+        .tile-green  { background: #f0fdf4; border: 1px solid #bbf7d0; }
+        .tile-amber  { background: #fffbeb; border: 1px solid #fde68a; }
+        .tile-blue   { background: #eff6ff; border: 1px solid #bfdbfe; }
+        .tile-label  { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.25rem; }
+        .tile-value  { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
+        .tile-green .tile-value { color: var(--green); }
+        .tile-amber .tile-value { color: var(--amber); }
+        .tile-blue  .tile-value { color: var(--blue); }
+
+        /* Invoice table */
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        th { text-align: left; padding: 0.5rem 0.5rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--border); }
+        td { padding: 0.6rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+        /* Nothing ready */
+        .empty { text-align: center; padding: 2.5rem 1rem; color: var(--muted); font-size: 0.95rem; }
+
+        /* Warning banner */
+        .notice {
+            background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+            padding: 0.9rem 1.1rem; font-size: 0.9rem; margin-bottom: 1.25rem;
+            display: flex; gap: 0.6rem; align-items: flex-start;
+        }
+        .notice-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 0.05rem; }
+
+        /* Buttons */
+        .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.25rem; }
+        .btn { display: inline-block; padding: 0.65rem 1.4rem; border-radius: 8px; font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; text-decoration: none; }
+        .btn-primary  { background: var(--green); color: #fff; }
+        .btn-primary:hover { background: #15803d; }
+        .btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+        .btn-outline  { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
+        .btn-outline:hover { background: #eff6ff; }
+
+        a { color: var(--blue); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+{% include "invoices/partials/navbar.html" %}
+
+<main>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="notice notice-{{ message.tags }}" style="margin-bottom:1rem;">
+        <span class="notice-icon">&#9888;</span>
+        <span>{{ message }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <section class="card">
+        <h1>Submit to Yardi</h1>
+        <p>Review the invoices below before confirming. Only invoices with all line items approved and a validated property code are included. Incomplete invoices remain in the system.</p>
+
+        <div class="summary">
+            <div class="tile tile-green">
+                <div class="tile-label">Ready to Submit</div>
+                <div class="tile-value">{{ invoice_count }}</div>
+            </div>
+            <div class="tile tile-blue">
+                <div class="tile-label">Grand Total</div>
+                <div class="tile-value">${{ total_amount|floatformat:2|intcomma }}</div>
+            </div>
+            <div class="tile tile-amber">
+                <div class="tile-label">Incomplete (stay)</div>
+                <div class="tile-value">{{ remaining_count }}</div>
+            </div>
+        </div>
+
+        {% if remaining_count %}
+        <div class="notice">
+            <span class="notice-icon">&#9888;</span>
+            <span>{{ remaining_count }} invoice{{ remaining_count|pluralize }} will not be submitted — they are missing a property code or have unapproved line items. They will remain in the system.</span>
+        </div>
+        {% endif %}
+    </section>
+
+    {% if invoice_count %}
+    <section class="card">
+        <h2>Invoices Included in This Submission</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Invoice #</th>
+                    <th>Date</th>
+                    <th>Property</th>
+                    <th>Purchaser</th>
+                    <th class="num">Grand Total</th>
+                    <th class="num">Line Items</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inv in invoices %}
+                <tr>
+                    <td><a href="{% url 'invoices:invoice_detail' inv.id %}">{{ inv.invoice_number }}</a></td>
+                    <td>{{ inv.invoice_date|default:"&mdash;" }}</td>
+                    <td>{{ inv.property_reference.code }}</td>
+                    <td>{{ inv.purchaser|default:"&mdash;" }}</td>
+                    <td class="num">${{ inv.grand_total|default:0|floatformat:2|intcomma }}</td>
+                    <td class="num">{{ inv.line_items.count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="actions">
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">Confirm &amp; Submit to Yardi</button>
+            </form>
+            <a href="{% url 'invoices:dashboard' %}" class="btn btn-outline">Cancel</a>
+        </div>
+    </section>
+
+    {% else %}
+    <section class="card">
+        <div class="empty">
+            <p>No invoices are ready to submit yet.</p>
+            <p>All invoices need a validated property code and every line item must have an approved GL code.</p>
+            <br>
+            <a href="{% url 'invoices:review_queue' %}" class="btn btn-outline">Go to Approval Queue</a>
+        </div>
+    </section>
+    {% endif %}
+
+</main>
+</body>
+</html>
