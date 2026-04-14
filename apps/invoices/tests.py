@@ -72,7 +72,7 @@ class ReferenceDataSyncServiceTests(TestCase):
 
         self.assertTrue(GLAccount.objects.filter(code="6328").exists())
         self.assertTrue(GLAccount.objects.filter(code="6734").exists())
-        self.assertTrue(PropertyReference.objects.filter(normalized_code="SSOH").exists())
+        self.assertTrue(PropertyReference.objects.filter(code="SSOH").exists())
         self.assertTrue(property_match.is_valid)
         self.assertEqual(property_match.normalized_code, "SSOH")
 
@@ -92,7 +92,7 @@ class ReferenceDataSyncServiceTests(TestCase):
         service = ReferenceDataSyncService(spreadsheet_reader=StubSpreadsheetReader())
         service.sync_all(force=True)
 
-        prop = PropertyReference.objects.get(normalized_code="BWOH")
+        prop = PropertyReference.objects.get(code="BWOH")
         self.assertEqual(prop.display_name, "Briarwood Oaks")
 
 
@@ -195,7 +195,7 @@ class InvoiceRepositoryServiceTests(TestCase):
         saved_invoice = InvoiceRepositoryService().save_parsed_invoices([parsed_invoice], upload_batch_id="job-1")[0]
 
         self.assertEqual(saved_invoice.property_code_normalized, "SSOH")
-        self.assertEqual(saved_invoice.property_reference.normalized_code, "SSOH")
+        self.assertEqual(saved_invoice.property_reference.code, "SSOH")
         self.assertEqual(saved_invoice.line_items.count(), 1)
         self.assertEqual(saved_invoice.line_items.first().suggested_gl.code, "6734")
 
@@ -287,29 +287,10 @@ class DashboardViewTests(TestCase):
             status="Parsed and classified.",
         )
 
-    def test_dashboard_post_saves_invoice_and_redirects_to_review(self) -> None:
-        with patch(
-            "apps.invoices.views.InvoiceProcessingService.process",
-            return_value=self._build_parsed_invoice(),
-        ):
-            response = self.client.post(
-                reverse("invoices:dashboard"),
-                {
-                    "invoice_pdf": SimpleUploadedFile(
-                        "invoice.pdf",
-                        b"pdf-bytes",
-                        content_type="application/pdf",
-                    )
-                },
-            )
-
-        saved_invoice = Invoice.objects.get(invoice_number="1FD6-HNRM-7M69")
-        self.assertRedirects(response, reverse("invoices:invoice_detail", args=[saved_invoice.id]))
-
     def test_bulk_upload_get_renders_form(self) -> None:
         response = self.client.get(reverse("invoices:bulk_upload"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bulk Upload")
+        self.assertContains(response, "Upload Invoices")
 
     def test_invoice_detail_post_saves_review_override(self) -> None:
         invoice = InvoiceRepositoryService().save_parsed_invoices([self._build_parsed_invoice()])[0]
@@ -318,16 +299,12 @@ class DashboardViewTests(TestCase):
 
         response = self.client.post(
             reverse("invoices:invoice_detail", args=[invoice.id]),
-            {
-                f"item_{line_item.id}_gl": approved_gl.code,
-                f"item_{line_item.id}_notes": "Reviewed and moved to office equipment.",
-            },
+            {f"item_{line_item.id}_gl": approved_gl.code},
         )
 
         self.assertRedirects(response, reverse("invoices:invoice_detail", args=[invoice.id]))
         line_item.refresh_from_db()
         self.assertEqual(line_item.approved_gl.code, "6328")
-        self.assertEqual(line_item.approval_notes, "Reviewed and moved to office equipment.")
 
     def test_invoice_detail_post_blocks_approval_without_validated_property(self) -> None:
         invoice = InvoiceRepositoryService().save_parsed_invoices([
@@ -489,8 +466,7 @@ class ReferenceDataViewTests(TestCase):
             reverse("invoices:reference_data"),
             {
                 "action": "save_property",
-                "property-yardi_code": "test-prop",
-                "property-normalized_code": "test-prop",
+                "property-code": "test-prop",
                 "property-website_id": "web-1",
                 "property-display_name": "Test Property",
             },
@@ -500,18 +476,18 @@ class ReferenceDataViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(
             PropertyReference.objects.filter(
-                normalized_code="TEST-PROP",
+                code="TEST-PROP",
                 display_name="Test Property",
             ).exists()
         )
 
 
 class RuntimeReferenceDataGuardTests(TestCase):
-    def test_dashboard_post_shows_error_when_reference_data_not_loaded(self) -> None:
+    def test_bulk_upload_post_shows_error_when_reference_data_not_loaded(self) -> None:
         response = self.client.post(
-            reverse("invoices:dashboard"),
+            reverse("invoices:bulk_upload"),
             {
-                "invoice_pdf": SimpleUploadedFile(
+                "invoice_pdfs": SimpleUploadedFile(
                     "invoice.pdf",
                     b"pdf-bytes",
                     content_type="application/pdf",
@@ -521,4 +497,4 @@ class RuntimeReferenceDataGuardTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Reference data has not been imported into the database yet")
+        self.assertContains(response, "GL codes and/or property references have not been loaded")

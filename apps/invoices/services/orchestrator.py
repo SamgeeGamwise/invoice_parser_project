@@ -151,4 +151,3 @@ class InvoiceProcessingService:
             # Auto-approve them so they never enter the manual review queue.
             if item.item_type in ("discount", "shipping") and item.suggested_gl_code:
                 item.approved_gl_code = item.suggested_gl_code
-                item.approval_notes = "Auto-approved: follows invoice-level GL."

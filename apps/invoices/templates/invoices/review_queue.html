@@ -805,11 +805,12 @@
 <nav>
     <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
     <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
-    <a href="{% url 'invoices:review_queue' %}" class="active">Review Queue</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
+    <a href="{% url 'invoices:review_queue' %}" class="active">Approval Queue</a>
     <a href="{% url 'invoices:reports' %}">Reports</a>
-    <a href="{% url 'invoices:reference_data' %}">Reference Data</a>
-    <a href="{% url 'invoices:property_audit' %}">Property Audit</a>
+    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
+    <a href="{% url 'invoices:properties' %}">Properties</a>
+    <a href="{% url 'invoices:property_audit' %}">Code Audit</a>
 </nav>
 
 <main>
@@ -822,7 +823,7 @@
     {% endif %}
 
     <div class="card intro-card">
-        <h1>Review Queue</h1>
+        <h1>Approval Queue</h1>
         <p>Approve or override the suggested GL code for each line item. The queue keeps server-side sorting for reliability, and your column layout stays local to this browser.</p>
         <div class="legend" aria-label="Confidence tiers">
             <span class="legend-item"><span class="legend-dot dot-auto"></span>Auto-approve candidate</span>

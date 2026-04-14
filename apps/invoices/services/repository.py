@@ -77,7 +77,6 @@ class InvoiceRepositoryService:
                         for candidate in parsed_line_item.suggestion_candidates
                     ],
                     approved_gl=approved_gl,
-                    approval_notes=parsed_line_item.approval_notes,
                 )
 
             # Auto-approve: single product line item + invoice has a GL code.
@@ -94,9 +93,8 @@ class InvoiceRepositoryService:
                     if gl:
                         item = product_items[0]
                         item.approved_gl = gl
-                        item.approval_notes = "Auto-approved: single line item with invoice GL code."
                         item.reviewed_at = timezone.now()
-                        item.save(update_fields=["approved_gl", "approval_notes", "reviewed_at", "updated_at"])
+                        item.save(update_fields=["approved_gl", "reviewed_at", "updated_at"])
 
             saved_invoices.append(invoice)
 

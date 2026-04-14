@@ -82,11 +82,12 @@
 <nav>
     <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
     <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
-    <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Approval Queue</a>
     <a href="{% url 'invoices:reports' %}">Reports</a>
-    <a href="{% url 'invoices:reference_data' %}">Reference Data</a>
-    <a href="{% url 'invoices:property_audit' %}" class="active">Property Audit</a>
+    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
+    <a href="{% url 'invoices:properties' %}">Properties</a>
+    <a href="{% url 'invoices:property_audit' %}" class="active">Code Audit</a>
 </nav>
 
 <main>
@@ -166,8 +167,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>Normalized code</th>
-                    <th>Yardi code</th>
+                    <th>Code</th>
                     <th>Website ID</th>
                     <th>Name</th>
                     <th>Invoices matched</th>
@@ -176,8 +176,7 @@
             <tbody>
                 {% for ref in references %}
                 <tr>
-                    <td><span class="code">{{ ref.normalized_code }}</span></td>
-                    <td><span class="code">{{ ref.yardi_code }}</span></td>
+                    <td><span class="code">{{ ref.code }}</span></td>
                     <td>
                         {% if ref.website_id %}
                         <span class="code">{{ ref.website_id }}</span>

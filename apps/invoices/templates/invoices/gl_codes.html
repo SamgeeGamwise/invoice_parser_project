@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Invoice Parser &mdash; GL Codes</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
+            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
+            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
+        }
+        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+        nav {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0 1.5rem; display: flex; align-items: center; gap: 2rem; height: 56px;
+        }
+        .brand { font-weight: 700; font-size: 1.05rem; color: var(--blue); text-decoration: none; }
+        nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+        nav a:hover, nav a.active { color: var(--blue); }
+        main { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
+        h1 { font-size: 1.4rem; margin: 0 0 0.35rem; }
+        h2 { font-size: 1.1rem; margin: 0 0 1rem; }
+        p { margin: 0.35rem 0; color: var(--muted); font-size: 0.92rem; }
+        .flash-stack { display: grid; gap: 0.8rem; margin-bottom: 1rem; }
+        .flash { padding: 0.9rem 1rem; border-radius: 12px; border: 1px solid var(--border); background: #fff; font-size: 0.88rem; }
+        .flash-success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+        .flash-error   { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+        .pill { display: inline-flex; align-items: center; padding: 0.3rem 0.75rem; border-radius: 999px; font-size: 0.82rem; font-weight: 700; background: #eff6ff; color: var(--blue); }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.35rem;
+            padding: 0.55rem 1rem; border-radius: 8px; font: inherit; font-size: 0.88rem;
+            font-weight: 600; cursor: pointer; text-decoration: none; border: 1px solid transparent;
+        }
+        .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-outline { background: transparent; border-color: var(--blue); color: var(--blue); }
+        .btn-outline:hover { background: #eff6ff; }
+        .btn-danger { background: #fff1f2; border-color: #fecdd3; color: #be123c; }
+        .btn-danger:hover { background: #ffe4e6; }
+        .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.8rem; }
+        .btn-ghost { background: transparent; border-color: var(--border); color: var(--muted); }
+        .btn-ghost:hover { background: var(--bg); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        th { text-align: left; padding: 0.55rem 0.75rem; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--border); }
+        td { padding: 0.75rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        .code { font-family: monospace; font-size: 0.87rem; }
+        .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
+        .badge-green { background: #dcfce7; color: #15803d; }
+        .badge-gray  { background: #f1f5f9; color: #475569; }
+        .table-actions { display: flex; gap: 0.4rem; }
+        .empty { text-align: center; color: var(--muted); padding: 2rem 1rem; }
+        .helper { font-size: 0.8rem; color: var(--muted); }
+        .helper code { font-family: monospace; background: var(--bg); padding: 0.1rem 0.3rem; border-radius: 4px; }
+        .errorlist { margin: 0.3rem 0 0; padding-left: 1rem; color: var(--red); font-size: 0.82rem; }
+        /* Modal */
+        dialog {
+            border: none; border-radius: 14px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+            padding: 0; max-width: 440px; width: 90%;
+        }
+        dialog::backdrop { background: rgba(0,0,0,0.35); }
+        .modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid var(--border);
+        }
+        .modal-header h3 { margin: 0; font-size: 1rem; }
+        .modal-close { background: none; border: none; cursor: pointer; font-size: 1.3rem; color: var(--muted); line-height: 1; padding: 0.1rem 0.3rem; border-radius: 4px; }
+        .modal-close:hover { background: var(--bg); }
+        .modal-body { padding: 1.25rem 1.5rem 1.5rem; }
+        .field { margin-bottom: 0.9rem; }
+        .field label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.3rem; font-weight: 600; }
+        .field input[type="text"] { width: 100%; font: inherit; font-size: 0.88rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; }
+        .field input:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue); }
+        .checkbox-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0 1.1rem; font-size: 0.88rem; }
+        .checkbox-row input { accent-color: var(--blue); }
+        .modal-actions { display: flex; gap: 0.6rem; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
+    <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Approval Queue</a>
+    <a href="{% url 'invoices:reports' %}">Reports</a>
+    <a href="{% url 'invoices:gl_codes' %}" class="active">GL Codes</a>
+    <a href="{% url 'invoices:properties' %}">Properties</a>
+    <a href="{% url 'invoices:property_audit' %}">Code Audit</a>
+</nav>
+
+<main>
+    {% if messages %}
+    <div class="flash-stack">
+        {% for message in messages %}
+        <div class="flash flash-{{ message.tags|default:'success' }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <section class="card">
+        <div class="header-row">
+            <div>
+                <h1>GL Codes</h1>
+                <p>Codes used to categorize invoice line items for Yardi.</p>
+            </div>
+            <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+                <span class="pill">{{ gl_accounts|length }} code{{ gl_accounts|length|pluralize }}</span>
+                <button id="btn-add-gl" class="btn btn-primary">+ Add GL Code</button>
+                <button id="btn-import-gl" class="btn btn-outline" type="button">Import CSV</button>
+                <form id="import-gl-form" method="post" enctype="multipart/form-data" style="display:none;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="import_gl_csv">
+                    <input type="file" id="import-gl-file" name="csv_file" accept=".csv">
+                </form>
+            </div>
+        </div>
+        <p class="helper" style="margin-top:0.6rem;">CSV format: no headers, two columns — <code>Code, Description</code></p>
+    </section>
+
+    <section class="card">
+        {% if gl_accounts %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Description</th>
+                    {% comment %} <th>In Approval Dropdown</th> {% endcomment %}
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for account in gl_accounts %}
+                <tr>
+                    <td class="code">{{ account.code }}</td>
+                    <td>{{ account.description }}</td>
+                    {% comment %} <td>
+                        {% if account.in_review_range %}
+                        <span class="badge badge-green">Yes</span>
+                        {% else %}
+                        <span class="badge badge-gray">No</span>
+                        {% endif %}
+                    </td> {% endcomment %}
+                    <td>
+                        <div class="table-actions">
+                            <button class="btn btn-outline btn-sm edit-gl"
+                                data-id="{{ account.id }}"
+                                data-code="{{ account.code }}"
+                                data-description="{{ account.description|escape }}"
+                                data-in-review="{{ account.in_review_range|lower }}">
+                                Edit
+                            </button>
+                            <form method="post" onsubmit="return confirm('Delete GL code {{ account.code }}?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete_gl">
+                                <input type="hidden" name="gl_id" value="{{ account.id }}">
+                                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty">No GL codes yet. Add one above or import a CSV file.</div>
+        {% endif %}
+    </section>
+</main>
+
+<!-- Add / Edit modal -->
+<dialog id="gl-modal">
+    <div class="modal-header">
+        <h3 id="gl-modal-title">Add GL Code</h3>
+        <button type="button" class="modal-close" onclick="document.getElementById('gl-modal').close()">&times;</button>
+    </div>
+    <div class="modal-body">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_gl">
+            <input type="hidden" name="gl_id" id="modal-gl-id" value="{{ gl_edit_id|default:'' }}">
+            <div class="field">
+                <label for="{{ gl_form.code.id_for_label }}">Code</label>
+                {{ gl_form.code }}
+                {{ gl_form.code.errors }}
+            </div>
+            <div class="field">
+                <label for="{{ gl_form.description.id_for_label }}">Description</label>
+                {{ gl_form.description }}
+                {{ gl_form.description.errors }}
+            </div>
+            <div class="checkbox-row">
+                {{ gl_form.in_review_range }}
+                <label for="{{ gl_form.in_review_range.id_for_label }}">Available for approval</label>
+            </div>
+            {% if gl_form.non_field_errors %}<ul class="errorlist">{% for e in gl_form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('gl-modal').close()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+document.getElementById('btn-import-gl').addEventListener('click', function () {
+    document.getElementById('import-gl-file').click();
+});
+document.getElementById('import-gl-file').addEventListener('change', function () {
+    if (this.files.length > 0) {
+        document.getElementById('import-gl-form').submit();
+    }
+});
+
+document.getElementById('btn-add-gl').addEventListener('click', function () {
+    document.getElementById('gl-modal-title').textContent = 'Add GL Code';
+    document.getElementById('modal-gl-id').value = '';
+    document.getElementById('{{ gl_form.code.id_for_label }}').value = '';
+    document.getElementById('{{ gl_form.description.id_for_label }}').value = '';
+    document.getElementById('{{ gl_form.in_review_range.id_for_label }}').checked = false;
+    document.getElementById('gl-modal').showModal();
+});
+
+document.querySelectorAll('.edit-gl').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        document.getElementById('gl-modal-title').textContent = 'Edit GL Code';
+        document.getElementById('modal-gl-id').value = btn.dataset.id;
+        document.getElementById('{{ gl_form.code.id_for_label }}').value = btn.dataset.code;
+        document.getElementById('{{ gl_form.description.id_for_label }}').value = btn.dataset.description;
+        document.getElementById('{{ gl_form.in_review_range.id_for_label }}').checked = btn.dataset.inReview === 'true';
+        document.getElementById('gl-modal').showModal();
+    });
+});
+
+{% if gl_form.errors %}
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('gl-modal-title').textContent = '{% if gl_edit_id %}Edit{% else %}Add{% endif %} GL Code';
+    document.getElementById('modal-gl-id').value = '{{ gl_edit_id|default:"" }}';
+    document.getElementById('gl-modal').showModal();
+});
+{% endif %}
+</script>
+
+</body>
+</html>

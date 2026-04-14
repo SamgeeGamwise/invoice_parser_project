@@ -164,11 +164,12 @@
 <nav>
     <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
     <a href="{% url 'invoices:dashboard' %}" class="active">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
-    <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Approval Queue</a>
     <a href="{% url 'invoices:reports' %}">Reports</a>
-    <a href="{% url 'invoices:reference_data' %}">Reference Data</a>
-    <a href="{% url 'invoices:property_audit' %}">Property Audit</a>
+    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
+    <a href="{% url 'invoices:properties' %}">Properties</a>
+    <a href="{% url 'invoices:property_audit' %}">Code Audit</a>
     {% if debug %}
     <a href="{% url 'invoices:clear_data' %}" style="margin-left: auto; color: #dc2626; font-size: 0.85rem;">Clear Data</a>
     {% endif %}
@@ -179,7 +180,7 @@
     <!-- Stats -->
     <section class="card">
         <h1>Dashboard</h1>
-        <p>Upload Amazon invoices, review GL code suggestions, and track spend across properties.</p>
+        <p>Track your batch status and submit approved invoices to Yardi.</p>
 
         <div class="stats">
             <div class="stat stat-blue">
@@ -187,16 +188,20 @@
                 <span class="stat-value">{{ stats.invoice_count }}</span>
             </div>
             <div class="stat stat-gray">
-                <span class="stat-label">Line Items</span>
+                <span class="stat-label">Batch Size</span>
                 <span class="stat-value">{{ stats.line_item_count }}</span>
             </div>
             <div class="stat stat-amber">
-                <span class="stat-label">Needs Review</span>
+                <span class="stat-label">Pending Approval</span>
                 <span class="stat-value">{{ stats.pending_review_count }}</span>
             </div>
             <div class="stat stat-green">
-                <span class="stat-label">Reviewed</span>
-                <span class="stat-value">{{ stats.reviewed_item_count }}</span>
+                <span class="stat-label">Ready to Submit</span>
+                <span class="stat-value">{{ stats.ready_to_submit }}</span>
+            </div>
+            <div class="stat stat-gray">
+                <span class="stat-label">Grand Total</span>
+                <span class="stat-value">${{ stats.total_amount|floatformat:2 }}</span>
             </div>
         </div>
 
@@ -205,108 +210,22 @@
             <div class="progress-track">
                 <div class="progress-fill" style="width: {{ review_pct }}%"></div>
             </div>
-            <p class="progress-label">{{ review_pct }}% of line items reviewed &mdash; {{ stats.reviewed_item_count }} of {{ stats.line_item_count }}</p>
+            <p class="progress-label">{{ review_pct }}% ready to submit &mdash; {{ stats.ready_to_submit }} of {{ stats.line_item_count }}</p>
         </div>
         {% endif %}
     </section>
 
-    <!-- Upload + Bulk -->
+    <!-- Quick actions -->
     <div class="grid-2">
-
-        <!-- Single upload -->
-        <article class="card">
-            <h2>Upload a Single Invoice</h2>
-            <p>Choose one PDF and we'll parse it immediately, then take you straight to the review screen.</p>
-
-            <form method="post" enctype="multipart/form-data" style="margin-top: 1rem;">
-                {% csrf_token %}
-
-                {% if single_form.errors %}
-                <ul class="error-list">
-                    {% for error in single_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
-                    {% for error in single_form.invoice_pdf.errors %}<li>{{ error }}</li>{% endfor %}
-                </ul>
-                {% endif %}
-
-                <label class="upload-label" for="id_invoice_pdf">
-                    <span style="font-size: 1.6rem; display: block; margin-bottom: 0.4rem;">📄</span>
-                    Click to choose a PDF
-                    <span class="upload-filename" id="single-filename"></span>
-                </label>
-                <input type="file" name="invoice_pdf" id="id_invoice_pdf" accept=".pdf"
-                       onchange="document.getElementById('single-filename').textContent = this.files[0]?.name || ''">
-
-                <button class="btn btn-primary" style="margin-top: 1rem; width: 100%;" type="submit">
-                    Upload &amp; Review
-                </button>
-            </form>
-        </article>
-
-        <!-- Bulk -->
-        <article class="card">
-            <h2>Bulk Upload</h2>
-            <p>Have a folder of invoices? Upload up to {{ max_files }} PDFs at once. Results are saved to:</p>
-            <code style="font-size: 0.82rem; color: var(--muted);">{{ output_path }}</code>
-            <p style="margin-top: 0.75rem;">Reference data in DB: {{ gl_account_count }} GL account{{ gl_account_count|pluralize }}, {{ property_reference_count }} property reference{{ property_reference_count|pluralize }}</p>
-            <a class="btn btn-outline" href="{% url 'invoices:bulk_upload' %}" style="margin-top: 1rem; display: inline-block;">
-                Open Bulk Upload &rarr;
-            </a>
-            <a class="btn btn-outline" href="{% url 'invoices:reference_data' %}" style="margin-top: 1rem; display: inline-block; margin-left: 0.5rem;">
-                Manage Reference Data &rarr;
-            </a>
-        </article>
-
+        <a class="card" href="{% url 'invoices:bulk_upload' %}" style="text-decoration:none; display:block;">
+            <h2 style="margin-bottom:0.3rem;">Upload Invoices</h2>
+            <p>Add one or more PDF invoices to the current batch.</p>
+        </a>
+        <a class="card" href="{% url 'invoices:review_queue' %}" style="text-decoration:none; display:block;">
+            <h2 style="margin-bottom:0.3rem;">Approval Queue</h2>
+            <p>Review and approve GL code assignments before submitting to Yardi.</p>
+        </a>
     </div>
-
-    <!-- Recent invoices -->
-    <section class="card">
-        <h2>Recent Invoices</h2>
-
-        {% if recent_invoices %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Invoice #</th>
-                    <th>Property</th>
-                    <th>GL Code</th>
-                    <th>Total</th>
-                    <th>Review Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for invoice in recent_invoices %}
-                <tr>
-                    <td>
-                        <a href="{% url 'invoices:invoice_detail' invoice.id %}">{{ invoice.invoice_number }}</a><br>
-                        <span style="font-size: 0.8rem; color: var(--muted);">{{ invoice.invoice_date|default:"Date unknown" }}</span>
-                    </td>
-                    <td>
-                        {{ invoice.property_code_normalized|default:"Unknown" }}
-                        {% if invoice.property_reference %}
-                            <span class="badge badge-green">validated</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ invoice.invoice_gl_code|default:"&mdash;" }}</td>
-                    <td>${{ invoice.grand_total|default:"&mdash;" }}</td>
-                    <td>
-                        {% if invoice.pending_review_count == 0 %}
-                            <span class="badge badge-green">All reviewed</span>
-                        {% else %}
-                            <span class="badge badge-amber">{{ invoice.pending_review_count }} remaining</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div class="empty-state">
-            <span class="icon">📭</span>
-            <strong>No invoices yet</strong>
-            Upload your first invoice above to get started.
-        </div>
-        {% endif %}
-    </section>
 
 </main>
 

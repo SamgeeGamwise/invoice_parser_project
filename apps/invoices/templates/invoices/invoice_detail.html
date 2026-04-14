@@ -65,18 +65,6 @@
             background: #fff;
         }
         select:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue); }
-        textarea {
-            width: 100%;
-            font: inherit;
-            font-size: 0.82rem;
-            padding: 0.4rem 0.5rem;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            resize: vertical;
-            min-height: 3.5rem;
-            margin-top: 0.4rem;
-        }
-        textarea:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
 
         /* Confidence bar */
         .confidence-bar { background: #e2e8f0; border-radius: 99px; height: 6px; margin: 0.3rem 0; overflow: hidden; }
@@ -104,11 +92,12 @@
 <nav>
     <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
     <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
-    <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Approval Queue</a>
     <a href="{% url 'invoices:reports' %}">Reports</a>
-    <a href="{% url 'invoices:reference_data' %}">Reference Data</a>
-    <a href="{% url 'invoices:property_audit' %}">Property Audit</a>
+    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
+    <a href="{% url 'invoices:properties' %}">Properties</a>
+    <a href="{% url 'invoices:property_audit' %}">Code Audit</a>
 </nav>
 
 <main>
@@ -131,6 +120,7 @@
             This invoice is flagged because its property code is missing or not validated. Approvals require both a GL and a validated property code.
         </div>
         {% endif %}
+
 
         <div class="meta">
             <div class="meta-item">
@@ -170,6 +160,82 @@
             </div>
         </div>
     </section>
+
+    {% if not invoice.has_valid_property %}
+    <!-- Fix property code -->
+    <section class="card" style="border-color: #fed7aa; background: #fffbf5;">
+        <h2 style="color: #92400e; margin-bottom: 0.5rem;">Fix Missing Property Code</h2>
+        {% if invoice.property_code_raw or invoice.property_code_normalized %}
+        <p style="color: #92400e; margin-bottom: 1rem;">
+            Extracted code from invoice: <strong style="color: #78350f;">{{ invoice.property_code_normalized|default:invoice.property_code_raw }}</strong>
+            &mdash; this did not match any known property reference.
+        </p>
+        {% else %}
+        <p style="color: #92400e; margin-bottom: 1rem;">No property code was found in this invoice.</p>
+        {% endif %}
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
+
+            <!-- Option 1: assign to existing -->
+            <div>
+                <div style="font-weight: 600; font-size: 0.88rem; margin-bottom: 0.5rem; color: var(--text);">Assign to existing property</div>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="assign_property">
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <select name="property_reference_id" style="flex: 1;" required>
+                            <option value="">-- Select property --</option>
+                            {% for ref in property_references %}
+                            <option value="{{ ref.pk }}">{{ ref.normalized_code }}{% if ref.display_name %} &mdash; {{ ref.display_name }}{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn-primary" type="submit" style="white-space: nowrap; padding: 0.5rem 1rem; font-size: 0.88rem;">Assign</button>
+                    </div>
+                    <p style="margin-top: 0.4rem; font-size: 0.78rem;">Also fixes other invoices with the same extracted code.</p>
+                </form>
+            </div>
+
+            <!-- Option 2: create new -->
+            <div>
+                <div style="font-weight: 600; font-size: 0.88rem; margin-bottom: 0.5rem; color: var(--text);">Register as new property</div>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="create_property">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; margin-bottom: 0.4rem;">
+                        <div>
+                            <label style="font-size: 0.75rem; color: var(--muted);">Normalized code *</label>
+                            <input type="text" name="fix_prop-normalized_code" value="{{ fix_property_form.normalized_code.value|default:'' }}"
+                                   placeholder="MI" required style="width: 100%; font: inherit; font-size: 0.85rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: 6px;">
+                            {% if fix_property_form.normalized_code.errors %}<span style="color: var(--red); font-size: 0.75rem;">{{ fix_property_form.normalized_code.errors|join:", " }}</span>{% endif %}
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: var(--muted);">Yardi code *</label>
+                            <input type="text" name="fix_prop-yardi_code" value="{{ fix_property_form.yardi_code.value|default:'' }}"
+                                   placeholder="MI" required style="width: 100%; font: inherit; font-size: 0.85rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: 6px;">
+                            {% if fix_property_form.yardi_code.errors %}<span style="color: var(--red); font-size: 0.75rem;">{{ fix_property_form.yardi_code.errors|join:", " }}</span>{% endif %}
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: var(--muted);">Display name</label>
+                            <input type="text" name="fix_prop-display_name" value="{{ fix_property_form.display_name.value|default:'' }}"
+                                   placeholder="Maple Isle" style="width: 100%; font: inherit; font-size: 0.85rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: 6px;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: var(--muted);">Website ID</label>
+                            <input type="text" name="fix_prop-website_id" value="{{ fix_property_form.website_id.value|default:'' }}"
+                                   placeholder="12345" style="width: 100%; font: inherit; font-size: 0.85rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: 6px;">
+                        </div>
+                    </div>
+                    {% if fix_property_form.non_field_errors %}
+                    <p style="color: var(--red); font-size: 0.78rem;">{{ fix_property_form.non_field_errors|join:", " }}</p>
+                    {% endif %}
+                    <button class="btn btn-primary" type="submit" style="padding: 0.5rem 1rem; font-size: 0.88rem;">Create &amp; Assign</button>
+                    <p style="margin-top: 0.4rem; font-size: 0.78rem;">Creates a new reference and links all matching invoices.</p>
+                </form>
+            </div>
+
+        </div>
+    </section>
+    {% endif %}
 
     <!-- Line item review -->
     <section class="card">
@@ -251,8 +317,6 @@
                                 </option>
                                 {% endfor %}
                             </select>
-                            <textarea id="item_{{ item.id }}_notes" name="item_{{ item.id }}_notes"
-                                      placeholder="Optional notes…">{{ item.approval_notes }}</textarea>
                         </td>
 
                     </tr>

@@ -43,7 +43,6 @@ class InvoiceLineItem:
     suggestion_candidates: list[GLSuggestion] = field(default_factory=list)
     approved_gl_code: str = ""
     approved_gl_description: str = ""
-    approval_notes: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)

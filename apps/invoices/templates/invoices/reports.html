@@ -57,11 +57,12 @@
 <nav>
     <a class="brand" href="{% url 'invoices:dashboard' %}">Invoice Parser</a>
     <a href="{% url 'invoices:dashboard' %}">Dashboard</a>
-    <a href="{% url 'invoices:bulk_upload' %}">Bulk Upload</a>
-    <a href="{% url 'invoices:review_queue' %}">Review Queue</a>
+    <a href="{% url 'invoices:bulk_upload' %}">Upload</a>
+    <a href="{% url 'invoices:review_queue' %}">Approval Queue</a>
     <a href="{% url 'invoices:reports' %}" class="active">Reports</a>
-    <a href="{% url 'invoices:reference_data' %}">Reference Data</a>
-    <a href="{% url 'invoices:property_audit' %}">Property Audit</a>
+    <a href="{% url 'invoices:gl_codes' %}">GL Codes</a>
+    <a href="{% url 'invoices:properties' %}">Properties</a>
+    <a href="{% url 'invoices:property_audit' %}">Code Audit</a>
 </nav>
 
 <main>
@@ -77,16 +78,20 @@
                 <div class="stat-value">{{ stats.invoice_count }}</div>
             </div>
             <div class="stat">
-                <div class="stat-label">Line Items</div>
+                <div class="stat-label">Batch Size</div>
                 <div class="stat-value">{{ stats.line_item_count }}</div>
             </div>
             <div class="stat">
-                <div class="stat-label">Pending Review</div>
+                <div class="stat-label">Pending Approval</div>
                 <div class="stat-value" style="color: var(--amber);">{{ stats.pending_review_count }}</div>
             </div>
             <div class="stat">
-                <div class="stat-label">Reviewed</div>
-                <div class="stat-value" style="color: var(--green);">{{ stats.reviewed_item_count }}</div>
+                <div class="stat-label">Ready to Submit</div>
+                <div class="stat-value" style="color: var(--green);">{{ stats.ready_to_submit }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Grand Total</div>
+                <div class="stat-value">${{ stats.total_amount|floatformat:2 }}</div>
             </div>
         </div>
     </section>

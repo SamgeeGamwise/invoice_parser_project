@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python manage.py migrate)",
+      "Bash(.venv/bin/python manage.py shell -c ':*)",
+      "Bash(.venv/bin/python manage.py makemigrations --name consolidate_property_reference_code)",
+      "Bash(.venv/bin/python manage.py test apps.invoices --verbosity=1)"
+    ]
+  }
+}

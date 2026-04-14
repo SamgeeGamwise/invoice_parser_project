@@ -1,7 +1,7 @@
 from collections import defaultdict
 from decimal import Decimal
 
-from django.db.models import Q
+from django.db.models import Q, Sum
 
 from ..models import Invoice, InvoiceLineItem
 
@@ -10,21 +10,26 @@ class ReportingService:
     def dashboard_stats(self) -> dict:
         invoices = Invoice.objects.count()
         line_items = InvoiceLineItem.objects.count()
-        pending_review = InvoiceLineItem.objects.filter(
+        pending_approval = InvoiceLineItem.objects.filter(
             item_type=InvoiceLineItem.ItemType.PRODUCT,
         ).filter(
             Q(approved_gl__isnull=True) | Q(invoice__property_reference__isnull=True)
         ).count()
-        reviewed_items = InvoiceLineItem.objects.filter(
+        approved_items = InvoiceLineItem.objects.filter(
+            item_type=InvoiceLineItem.ItemType.PRODUCT,
             approved_gl__isnull=False,
             invoice__property_reference__isnull=False,
         ).count()
+        total_amount = Invoice.objects.aggregate(t=Sum("grand_total"))["t"] or Decimal("0.00")
+        ready_to_submit = line_items - pending_approval
 
         return {
             "invoice_count": invoices,
             "line_item_count": line_items,
-            "pending_review_count": pending_review,
-            "reviewed_item_count": reviewed_items,
+            "pending_review_count": pending_approval,
+            "approved_count": approved_items,
+            "ready_to_submit": ready_to_submit,
+            "total_amount": total_amount,
         }
 
     def spend_by_gl(self) -> list[dict]:

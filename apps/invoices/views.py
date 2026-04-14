@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 import queue
 import threading
@@ -32,45 +34,15 @@ def _display_path(path) -> str:
         return str(path)
 
 
-def _dashboard_context(single_form=None, bulk_form=None) -> dict:
+def _dashboard_context() -> dict:
     reporting = ReportingService()
-    data_catalog = ProjectDataCatalogService()
     stats = reporting.dashboard_stats()
-
-    total_reviewable = stats["line_item_count"]
-    reviewed = stats["reviewed_item_count"]
-    review_pct = int((reviewed / total_reviewable) * 100) if total_reviewable else 0
-
-    return {
-        "single_form": single_form or InvoiceUploadForm(),
-        "bulk_form": bulk_form or BulkInvoiceUploadForm(),
-        "stats": stats,
-        "review_pct": review_pct,
-        "recent_invoices": Invoice.objects.prefetch_related("line_items")[:10],
-        "sample_invoice_count": len(data_catalog.list_sample_invoices()),
-        "gl_account_count": GLAccount.objects.count(),
-        "property_reference_count": PropertyReference.objects.count(),
-        "output_path": _display_path(settings.PARSED_INVOICES_JSON),
-        "max_files": settings.BULK_UPLOAD_MAX_FILES,
-    }
+    total = stats["line_item_count"]
+    review_pct = int((stats["ready_to_submit"] / total) * 100) if total else 0
+    return {"stats": stats, "review_pct": review_pct}
 
 
 def dashboard_view(request: HttpRequest) -> HttpResponse:
-    """Main hub: shows stats, a single-file upload form, and recent invoices."""
-    if request.method == "POST":
-        form = InvoiceUploadForm(request.POST, request.FILES)
-        if form.is_valid():
-            processor = InvoiceProcessingService()
-            repository = InvoiceRepositoryService()
-            try:
-                parsed = processor.process(form.cleaned_data["invoice_pdf"])
-            except RuntimeError as exc:
-                form.add_error(None, str(exc))
-                return render(request, "invoices/dashboard.html", _dashboard_context(single_form=form))
-            saved = repository.save_parsed_invoices([parsed])[0]
-            return redirect("invoices:invoice_detail", invoice_id=saved.id)
-        return render(request, "invoices/dashboard.html", _dashboard_context(single_form=form))
-
     return render(request, "invoices/dashboard.html", _dashboard_context())
 
 
@@ -159,58 +131,103 @@ def invoice_detail_view(request: HttpRequest, invoice_id: int) -> HttpResponse:
         pk=invoice_id,
     )
     gl_accounts = list(GLAccount.objects.filter(in_review_range=True).order_by("code"))
+    fix_property_form = PropertyReferenceForm(
+        initial={
+            "code": invoice.property_code_normalized or invoice.property_code_raw or "",
+        },
+        prefix="fix_prop",
+    )
 
     if request.method == "POST":
-        approved_count = 0
-        cleared_count = 0
+        action = request.POST.get("action", "")
 
-        for item in invoice.line_items.all():
-            approved_gl_code = request.POST.get(f"item_{item.id}_gl", "").strip()
-            approval_notes = request.POST.get(f"item_{item.id}_notes", "").strip()
-            approved_gl = GLAccount.objects.filter(code=approved_gl_code).first() if approved_gl_code else None
-            block_reason = _approval_block_reason(item, approved_gl) if approved_gl else None
-
-            item.approval_notes = approval_notes
-
-            if block_reason:
-                item.approved_gl = None
-                item.reviewed_at = None
-                item.save(update_fields=["approved_gl", "approval_notes", "reviewed_at", "updated_at"])
-                continue
-
-            item.approved_gl = approved_gl
-            if approved_gl:
-                item.mark_reviewed()
-                approved_count += 1
+        if action == "assign_property":
+            ref_id = request.POST.get("property_reference_id", "").strip()
+            ref = PropertyReference.objects.filter(pk=ref_id).first()
+            if ref:
+                normalized = invoice.property_code_normalized
+                if normalized:
+                    updated = Invoice.objects.filter(
+                        property_code_normalized=normalized,
+                        property_reference__isnull=True,
+                    ).update(property_reference=ref)
+                else:
+                    invoice.property_reference = ref
+                    invoice.save(update_fields=["property_reference", "updated_at"])
+                    updated = 1
+                messages.success(
+                    request,
+                    f"Assigned \"{ref.code}\" to {updated} invoice(s) with code \"{normalized or invoice.property_code_raw}\".",
+                )
             else:
-                item.reviewed_at = None
-                cleared_count += 1
-            item.save(update_fields=["approved_gl", "approval_notes", "reviewed_at", "updated_at"])
+                messages.error(request, "No valid property reference selected.")
+            return redirect("invoices:invoice_detail", invoice_id=invoice.id)
 
-        if not invoice.has_valid_property:
-            messages.error(
-                request,
-                (
-                    f"Invoice {invoice.invoice_number} is flagged: approvals require both a GL "
-                    "and a validated property code."
-                ),
-            )
-        elif approved_count:
-            messages.success(
-                request,
-                f"Saved {approved_count} approval{'s' if approved_count != 1 else ''} for invoice {invoice.invoice_number}.",
-            )
-        elif cleared_count:
-            messages.info(
-                request,
-                f"Cleared {cleared_count} approval{'s' if cleared_count != 1 else ''} for invoice {invoice.invoice_number}.",
-            )
+        if action == "create_property":
+            fix_property_form = PropertyReferenceForm(request.POST, prefix="fix_prop")
+            if fix_property_form.is_valid():
+                new_ref = fix_property_form.save()
+                updated = Invoice.objects.filter(
+                    property_code_normalized=new_ref.code,
+                    property_reference__isnull=True,
+                ).update(property_reference=new_ref)
+                messages.success(
+                    request,
+                    f"Created property \"{new_ref.code}\" and linked {updated} invoice(s).",
+                )
+                return redirect("invoices:invoice_detail", invoice_id=invoice.id)
+            # Form invalid — fall through to render with errors
 
-        return redirect("invoices:invoice_detail", invoice_id=invoice.id)
+        else:
+            approved_count = 0
+            cleared_count = 0
+
+            for item in invoice.line_items.all():
+                approved_gl_code = request.POST.get(f"item_{item.id}_gl", "").strip()
+                approved_gl = GLAccount.objects.filter(code=approved_gl_code).first() if approved_gl_code else None
+                block_reason = _approval_block_reason(item, approved_gl) if approved_gl else None
+
+                if block_reason:
+                    item.approved_gl = None
+                    item.reviewed_at = None
+                    item.save(update_fields=["approved_gl", "reviewed_at", "updated_at"])
+                    continue
+
+                item.approved_gl = approved_gl
+                if approved_gl:
+                    item.mark_reviewed()
+                    approved_count += 1
+                else:
+                    item.reviewed_at = None
+                    cleared_count += 1
+                item.save(update_fields=["approved_gl", "reviewed_at", "updated_at"])
+
+            if not invoice.has_valid_property:
+                messages.error(
+                    request,
+                    (
+                        f"Invoice {invoice.invoice_number} is flagged: approvals require both a GL "
+                        "and a validated property code."
+                    ),
+                )
+            elif approved_count:
+                messages.success(
+                    request,
+                    f"Saved {approved_count} approval{'s' if approved_count != 1 else ''} for invoice {invoice.invoice_number}.",
+                )
+            elif cleared_count:
+                messages.info(
+                    request,
+                    f"Cleared {cleared_count} approval{'s' if cleared_count != 1 else ''} for invoice {invoice.invoice_number}.",
+                )
+
+            return redirect("invoices:invoice_detail", invoice_id=invoice.id)
 
     return render(request, "invoices/invoice_detail.html", {
         "invoice": invoice,
         "gl_accounts": gl_accounts,
+        "property_references": PropertyReference.objects.order_by("code"),
+        "fix_property_form": fix_property_form,
     })
 
 
@@ -304,7 +321,10 @@ def review_queue_view(request: HttpRequest) -> HttpResponse:
     if sort_col not in _SORT_FIELDS:
         sort_col = "confidence"
 
-    sort_dir = "desc" if request.GET.get("dir") == "desc" else "asc"
+    default_dir = "desc" if sort_col == "confidence" else "asc"
+    sort_dir = request.GET.get("dir", default_dir)
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = default_dir
     sort_field = _SORT_FIELDS[sort_col]
     order_expr = sort_field if sort_dir == "asc" else f"-{sort_field}"
 
@@ -481,21 +501,21 @@ def reference_data_view(request: HttpRequest) -> HttpResponse:
             property_form = PropertyReferenceForm(request.POST, instance=target, prefix="property")
             if property_form.is_valid():
                 record = property_form.save()
-                messages.success(request, f"Saved property reference {record.normalized_code}.")
+                messages.success(request, f"Saved property reference {record.code}.")
                 return redirect("invoices:reference_data")
             property_instance = target
 
         elif action == "delete_property":
             target = PropertyReference.objects.filter(pk=request.POST.get("property_id")).first()
             if target:
-                code = target.normalized_code
+                code = target.code
                 target.delete()
                 messages.success(request, f"Deleted property reference {code}.")
             return redirect("invoices:reference_data")
 
     return render(request, "invoices/reference_data.html", {
         "gl_accounts": GLAccount.objects.order_by("code"),
-        "property_references": PropertyReference.objects.order_by("normalized_code"),
+        "property_references": PropertyReference.objects.order_by("code"),
         "gl_form": gl_form,
         "property_form": property_form,
         "gl_edit_id": int(gl_instance.id) if gl_instance else None,
@@ -538,7 +558,7 @@ def property_audit_view(request: HttpRequest) -> HttpResponse:
     references = list(
         PropertyReference.objects
         .annotate(invoice_count=Count("invoices"))
-        .order_by("normalized_code")
+        .order_by("code")
     )
 
     total = Invoice.objects.count()
@@ -550,6 +570,129 @@ def property_audit_view(request: HttpRequest) -> HttpResponse:
         "total_invoices": total,
         "matched_invoices": matched,
         "unmatched_invoices": total - matched,
+    })
+
+
+def gl_codes_view(request: HttpRequest) -> HttpResponse:
+    """Manage GL account codes used for invoice approval."""
+    gl_form = GLAccountForm()
+    gl_edit_id = None
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+
+        if action == "import_gl_csv":
+            csv_file = request.FILES.get("csv_file")
+            if not csv_file:
+                messages.error(request, "No file selected.")
+                return redirect("invoices:gl_codes")
+            try:
+                text = csv_file.read().decode("utf-8-sig")
+                reader = csv.reader(io.StringIO(text))
+                imported = 0
+                for row in reader:
+                    if len(row) < 2:
+                        continue
+                    code, description = row[0].strip(), row[1].strip()
+                    if not code or not description:
+                        continue
+                    GLAccount.objects.update_or_create(
+                        code=code,
+                        defaults={
+                            "description": description,
+                            "in_review_range": ReferenceDataSyncService()._in_review_range(code),
+                        },
+                    )
+                    imported += 1
+                messages.success(request, f"Imported {imported} GL code(s) from CSV.")
+            except Exception as exc:
+                messages.error(request, f"Import failed: {exc}")
+            return redirect("invoices:gl_codes")
+
+        elif action == "save_gl":
+            gl_id = request.POST.get("gl_id") or None
+            target = GLAccount.objects.filter(pk=gl_id).first() if gl_id else None
+            gl_edit_id = target.pk if target else None
+            gl_form = GLAccountForm(request.POST, instance=target)
+            if gl_form.is_valid():
+                record = gl_form.save()
+                messages.success(request, f"Saved GL code {record.code}.")
+                return redirect("invoices:gl_codes")
+
+        elif action == "delete_gl":
+            gl_id = request.POST.get("gl_id") or None
+            target = GLAccount.objects.filter(pk=gl_id).first() if gl_id else None
+            if target:
+                code = target.code
+                target.delete()
+                messages.success(request, f"Deleted GL code {code}.")
+            return redirect("invoices:gl_codes")
+
+    return render(request, "invoices/gl_codes.html", {
+        "gl_accounts": GLAccount.objects.order_by("code"),
+        "gl_form": gl_form,
+        "gl_edit_id": gl_edit_id,
+    })
+
+
+def properties_view(request: HttpRequest) -> HttpResponse:
+    """Manage property codes used to validate invoices."""
+    prop_form = PropertyReferenceForm()
+    prop_edit_id = None
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+
+        if action == "import_property_csv":
+            csv_file = request.FILES.get("csv_file")
+            if not csv_file:
+                messages.error(request, "No file selected.")
+                return redirect("invoices:properties")
+            try:
+                text = csv_file.read().decode("utf-8-sig")
+                reader = csv.reader(io.StringIO(text))
+                svc = ReferenceDataSyncService()
+                imported = 0
+                for row in reader:
+                    if len(row) < 2:
+                        continue
+                    website_id, raw_code = row[0].strip(), row[1].strip()
+                    if not raw_code:
+                        continue
+                    code = svc.normalize_property_code(raw_code)
+                    PropertyReference.objects.update_or_create(
+                        code=code,
+                        defaults={"website_id": website_id},
+                    )
+                    imported += 1
+                messages.success(request, f"Imported {imported} property reference(s) from CSV.")
+            except Exception as exc:
+                messages.error(request, f"Import failed: {exc}")
+            return redirect("invoices:properties")
+
+        elif action == "save_property":
+            prop_id = request.POST.get("property_id") or None
+            target = PropertyReference.objects.filter(pk=prop_id).first() if prop_id else None
+            prop_edit_id = target.pk if target else None
+            prop_form = PropertyReferenceForm(request.POST, instance=target)
+            if prop_form.is_valid():
+                record = prop_form.save()
+                messages.success(request, f"Saved property {record.code}.")
+                return redirect("invoices:properties")
+
+        elif action == "delete_property":
+            prop_id = request.POST.get("property_id") or None
+            target = PropertyReference.objects.filter(pk=prop_id).first() if prop_id else None
+            if target:
+                code = target.code
+                target.delete()
+                messages.success(request, f"Deleted property {code}.")
+            return redirect("invoices:properties")
+
+    return render(request, "invoices/properties.html", {
+        "property_references": PropertyReference.objects.order_by("code"),
+        "prop_form": prop_form,
+        "prop_edit_id": prop_edit_id,
     })
 
 

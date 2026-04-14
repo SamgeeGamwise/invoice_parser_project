@@ -29,8 +29,8 @@ class ReferenceDataSyncService:
     def ensure_loaded(self) -> None:
         if not GLAccount.objects.exists() or not PropertyReference.objects.exists():
             raise RuntimeError(
-                "Reference data has not been imported into the database yet. "
-                "Import GL accounts and property references before processing invoices."
+                "GL codes and/or property references have not been loaded. "
+                "Import them via the GL Codes and Properties pages before processing invoices."
             )
 
     def sync_gl_accounts(self, force: bool = False) -> None:
@@ -69,19 +69,18 @@ class ReferenceDataSyncService:
                 continue
             extras = [value.strip() for value in row[2:] if value and value.strip()]
             display_name = extras[0] if extras else ""
-            normalized_code = self.normalize_property_code(yardi_code)
+            code = self.normalize_property_code(yardi_code)
             PropertyReference.objects.update_or_create(
-                yardi_code=yardi_code.strip(),
+                code=code,
                 defaults={
                     "website_id": website_id.strip(),
-                    "normalized_code": normalized_code,
                     "display_name": display_name,
                 },
             )
 
     def match_property_code(self, property_code: str) -> PropertyMatch:
         normalized_code = self.normalize_property_code(property_code)
-        property_reference = PropertyReference.objects.filter(normalized_code=normalized_code).first()
+        property_reference = PropertyReference.objects.filter(code=normalized_code).first()
         return PropertyMatch(
             normalized_code=normalized_code,
             is_valid=property_reference is not None,

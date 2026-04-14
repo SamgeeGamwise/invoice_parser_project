@@ -91,19 +91,15 @@ class GLAccountForm(forms.ModelForm):
 class PropertyReferenceForm(forms.ModelForm):
     class Meta:
         model = PropertyReference
-        fields = ["yardi_code", "normalized_code", "website_id", "display_name"]
+        fields = ["code", "website_id", "display_name"]
         widgets = {
-            "yardi_code": forms.TextInput(attrs={"placeholder": "SSOH"}),
-            "normalized_code": forms.TextInput(attrs={"placeholder": "SSOH"}),
+            "code": forms.TextInput(attrs={"placeholder": "SSOH"}),
             "website_id": forms.TextInput(attrs={"placeholder": "12345"}),
             "display_name": forms.TextInput(attrs={"placeholder": "Sunset Station"}),
         }
 
-    def clean_normalized_code(self):
-        return (self.cleaned_data.get("normalized_code") or "").strip().upper()
-
-    def clean_yardi_code(self):
-        return (self.cleaned_data.get("yardi_code") or "").strip()
+    def clean_code(self):
+        return (self.cleaned_data.get("code") or "").strip().upper()
 
     def clean_display_name(self):
         return (self.cleaned_data.get("display_name") or "").strip()

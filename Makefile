@@ -18,8 +18,8 @@ migrations:    ## Generate new migrations after model changes
 import-reference-data: ## Import GL accounts and property references from the Excel files into the DB
 	$(MANAGE) import_reference_data
 
-reset:         ## Wipe all invoice data (keeps GL accounts and property refs)
-	$(MANAGE) clear_data --yes
+reset:         ## Wipe all data including GL codes and property references (debug reset)
+	$(MANAGE) clear_data --yes --all
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 
@@ -27,7 +27,7 @@ install:       ## Create venv and install dependencies
 	python3 -m venv $(VENV)
 	$(VENV)/bin/pip install -r requirements.txt
 
-setup: install migrate import-reference-data ## Full first-time setup
+setup: install migrate ## First-time setup (import GL codes and properties via the UI)
 
 # ── Help ─────────────────────────────────────────────────────────────────────
 
