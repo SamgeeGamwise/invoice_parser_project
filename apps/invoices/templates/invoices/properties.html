@@ -1,74 +1,15 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Invoice Parser &mdash; Properties</title>
+    <link rel="stylesheet" href="{% static 'invoices/css/base.css' %}">
     <style>
-        *, *::before, *::after { box-sizing: border-box; }
-        :root {
-            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
-            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
-            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
-        }
-        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
-        {% include "invoices/partials/navbar_styles.html" %}
-        main { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
-        h1 { font-size: 1.4rem; margin: 0 0 0.35rem; }
-        p { margin: 0.35rem 0; color: var(--muted); font-size: 0.92rem; }
-        .flash-stack { display: grid; gap: 0.8rem; margin-bottom: 1rem; }
-        .flash { padding: 0.9rem 1rem; border-radius: 12px; border: 1px solid var(--border); background: #fff; font-size: 0.88rem; }
-        .flash-success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
-        .flash-error   { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
-        .header-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-        .pill { display: inline-flex; align-items: center; padding: 0.3rem 0.75rem; border-radius: 999px; font-size: 0.82rem; font-weight: 700; background: #f0fdf4; color: var(--green); }
-        .btn {
-            display: inline-flex; align-items: center; gap: 0.35rem;
-            padding: 0.55rem 1rem; border-radius: 8px; font: inherit; font-size: 0.88rem;
-            font-weight: 600; cursor: pointer; text-decoration: none; border: 1px solid transparent;
-        }
-        .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
-        .btn-primary:hover { background: #1d4ed8; }
-        .btn-danger { background: #fff1f2; border-color: #fecdd3; color: #be123c; }
-        .btn-danger:hover { background: #ffe4e6; }
-        .btn-outline { background: transparent; border-color: var(--blue); color: var(--blue); }
-        .btn-outline:hover { background: #eff6ff; }
-        .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.8rem; }
-        .btn-ghost { background: transparent; border-color: var(--border); color: var(--muted); }
-        .btn-ghost:hover { background: var(--bg); }
-        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-        th { text-align: left; padding: 0.55rem 0.75rem; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--border); }
-        td { padding: 0.75rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
-        tr:last-child td { border-bottom: none; }
-        .code { font-family: monospace; font-size: 0.87rem; }
-        .table-actions { display: flex; gap: 0.4rem; }
-        .empty { text-align: center; color: var(--muted); padding: 2rem 1rem; }
-        .helper { font-size: 0.8rem; color: var(--muted); }
-        .helper code { font-family: monospace; background: var(--bg); padding: 0.1rem 0.3rem; border-radius: 4px; }
-        .errorlist { margin: 0.3rem 0 0; padding-left: 1rem; color: var(--red); font-size: 0.82rem; }
-        /* Modal */
-        dialog {
-            border: none; border-radius: 14px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.18);
-            padding: 0; max-width: 460px; width: 90%;
-        }
-        dialog::backdrop { background: rgba(0,0,0,0.35); }
-        .modal-header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid var(--border);
-        }
-        .modal-header h3 { margin: 0; font-size: 1rem; }
-        .modal-close { background: none; border: none; cursor: pointer; font-size: 1.3rem; color: var(--muted); line-height: 1; padding: 0.1rem 0.3rem; border-radius: 4px; }
-        .modal-close:hover { background: var(--bg); }
-        .modal-body { padding: 1.25rem 1.5rem 1.5rem; }
-        .field { margin-bottom: 0.9rem; }
-        .field label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.3rem; font-weight: 600; }
-        .field input[type="text"] { width: 100%; font: inherit; font-size: 0.88rem; padding: 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: 8px; }
-        .field input:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue); }
-        .field-hint { font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; }
-        .modal-actions { display: flex; gap: 0.6rem; }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+        main { max-width: 960px; }
+        /* Properties pill is green, not blue */
+        .pill { background: #f0fdf4; color: var(--green); }
     </style>
 </head>
 <body>

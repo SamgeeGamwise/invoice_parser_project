@@ -1,13 +1,14 @@
 {% load humanize %}
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Invoice Parser &mdash; Review Queue</title>
+    <link rel="stylesheet" href="{% static 'invoices/css/base.css' %}">
     <style>
-        *, *::before, *::after { box-sizing: border-box; }
-
+        /* ── Custom tokens for this page ── */
         :root {
             --bg: #eef2f8;
             --surface: #ffffff;
@@ -43,7 +44,19 @@
                 linear-gradient(180deg, #f8fbff 0%, var(--bg) 32%, #edf2f8 100%);
         }
 
-        {% include "invoices/partials/navbar_styles.html" with nav_style_variant="frosted" %}
+        /* ── Frosted navbar override ── */
+        .site-nav {
+            display: flex; align-items: center; gap: 1.6rem;
+            height: 58px; padding: 0 1.5rem;
+            background: rgba(255,255,255,0.88);
+            border-bottom: 1px solid rgba(199,212,229,0.8);
+            backdrop-filter: blur(14px);
+            position: sticky; top: 0; z-index: 40;
+        }
+        .site-nav .brand { margin-right: 0.2rem; font-size: 1.05rem; font-weight: 700; color: var(--blue); text-decoration: none; }
+        .site-nav a, .site-nav summary { color: var(--muted); text-decoration: none; font-size: 0.92rem; }
+        .site-nav a:hover, .site-nav a.active, .site-nav summary:hover,
+        .site-nav .nav-dropdown.active summary, .site-nav .nav-dropdown[open] summary { color: var(--blue); }
 
         main {
             max-width: 1440px;

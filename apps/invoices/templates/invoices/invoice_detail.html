@@ -1,82 +1,33 @@
 {% load humanize %}
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Invoice Parser &mdash; {{ invoice.invoice_number }}</title>
+    <link rel="stylesheet" href="{% static 'invoices/css/base.css' %}">
     <style>
-        *, *::before, *::after { box-sizing: border-box; }
-        :root {
-            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
-            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
-            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
-        }
-        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+        main { max-width: 1200px; }
 
-        {% include "invoices/partials/navbar_styles.html" %}
-
-        main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
-
-        h1 { font-size: 1.3rem; margin: 0 0 0.2rem; }
-        h2 { font-size: 1.05rem; margin: 0 0 1rem; }
-        p  { margin: 0.35rem 0; color: var(--muted); font-size: 0.9rem; }
-
-        .flash-stack { display: grid; gap: 0.8rem; margin-bottom: 1rem; }
-        .flash {
-            padding: 0.9rem 1rem;
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            background: #fff;
-            font-size: 0.88rem;
-            line-height: 1.45;
-        }
-        .flash.flash-success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
-        .flash.flash-error { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
-        .flash.flash-info { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
-
-        /* Meta grid */
+        /* Invoice meta grid */
         .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
-        .meta-item { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 0.9rem; }
+        .meta-item  { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 0.9rem; }
         .meta-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.2rem; }
         .meta-value { font-size: 0.95rem; font-weight: 600; color: var(--text); }
 
-        /* Line items table */
-        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-        th { text-align: left; padding: 0.5rem 0.4rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--border); white-space: nowrap; }
-        td { padding: 0.8rem 0.4rem; border-bottom: 1px solid var(--border); vertical-align: top; }
-        tr:last-child td { border-bottom: none; }
+        /* Line items */
+        td { padding: 0.8rem 0.4rem; vertical-align: top; }
+        th { padding: 0.5rem 0.4rem; }
         tr.reviewed-row { background: #f0fdf4; }
 
         /* GL selector */
-        select {
-            width: 100%;
-            font: inherit;
-            font-size: 0.85rem;
-            padding: 0.4rem 0.5rem;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: #fff;
-        }
+        select { width: 100%; font: inherit; font-size: 0.85rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
         select:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue); }
 
         /* Confidence bar */
-        .confidence-bar { background: #e2e8f0; border-radius: 99px; height: 6px; margin: 0.3rem 0; overflow: hidden; }
+        .confidence-bar  { background: #e2e8f0; border-radius: 99px; height: 6px; margin: 0.3rem 0; overflow: hidden; }
         .confidence-fill { height: 100%; border-radius: 99px; background: var(--green); }
-
-        .badge { display: inline-block; padding: 0.12rem 0.45rem; border-radius: 99px; font-size: 0.72rem; font-weight: 600; }
-        .badge-green  { background: #dcfce7; color: #15803d; }
-        .badge-amber  { background: #fef3c7; color: #92400e; }
-        .badge-blue   { background: #dbeafe; color: #1e40af; }
-        .badge-gray   { background: #f1f5f9; color: #475569; }
-
-        .btn { display: inline-block; padding: 0.65rem 1.5rem; border-radius: 8px; font: inherit; font-size: 0.95rem; font-weight: 600; cursor: pointer; border: none; }
-        .btn-primary { background: var(--blue); color: #fff; }
-        .btn-primary:hover { background: #1d4ed8; }
-
-        a { color: var(--blue); text-decoration: none; }
-        a:hover { text-decoration: underline; }
 
         summary { cursor: pointer; font-size: 0.8rem; color: var(--muted); }
         details ul { margin: 0.4rem 0 0; padding-left: 1rem; font-size: 0.8rem; color: var(--muted); }

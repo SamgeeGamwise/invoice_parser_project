@@ -1,36 +1,18 @@
 {% load humanize %}
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Invoice Parser &mdash; Submission Complete</title>
+    <link rel="stylesheet" href="{% static 'invoices/css/base.css' %}">
     <style>
-        *, *::before, *::after { box-sizing: border-box; }
-        :root {
-            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
-            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
-            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
-        }
-        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
-
-        {% include "invoices/partials/navbar_styles.html" %}
-
-        main { max-width: 780px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
-
-        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
-        h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
-        p  { margin: 0.35rem 0; color: var(--muted); font-size: 0.92rem; }
+        main { max-width: 780px; }
 
         /* Summary tiles */
-        .summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin: 1.25rem 0;
-        }
-        .tile { border-radius: 10px; padding: 1rem; }
+        .summary     { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
+        .tile        { border-radius: 10px; padding: 1rem; }
         .tile-green  { background: #f0fdf4; border: 1px solid #bbf7d0; }
         .tile-blue   { background: #eff6ff; border: 1px solid #bfdbfe; }
         .tile-gray   { background: #f8fafc; border: 1px solid #e2e8f0; }
@@ -40,30 +22,13 @@
         .tile-blue  .tile-value { color: var(--blue); }
         .tile-gray  .tile-value { color: #475569; }
 
-        /* File output list */
-        .file-list { list-style: none; padding: 0; margin: 0.75rem 0 0; }
-        .file-list li {
-            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
-            padding: 0.75rem 0; border-bottom: 1px solid var(--border);
-        }
+        /* Output file list */
+        .file-list    { list-style: none; padding: 0; margin: 0.75rem 0 0; }
+        .file-list li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
         .file-list li:last-child { border-bottom: none; }
         .file-meta { display: flex; flex-direction: column; gap: 0.2rem; }
         .file-name { font-weight: 600; font-size: 0.92rem; }
         .file-path { font-family: monospace; font-size: 0.78rem; color: var(--muted); word-break: break-all; }
-
-        /* Buttons */
-        .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.25rem; }
-        .btn { display: inline-block; padding: 0.65rem 1.4rem; border-radius: 8px; font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; text-decoration: none; }
-        .btn-primary { background: var(--blue); color: #fff; }
-        .btn-primary:hover { background: #1d4ed8; }
-        .btn-outline  { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
-        .btn-outline:hover { background: #eff6ff; }
-        .btn-sm { padding: 0.35rem 0.85rem; font-size: 0.82rem; }
-
-        a { color: var(--blue); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-
-        .badge-green { display: inline-block; background: #dcfce7; color: #15803d; padding: 0.15rem 0.6rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
     </style>
 </head>
 <body>

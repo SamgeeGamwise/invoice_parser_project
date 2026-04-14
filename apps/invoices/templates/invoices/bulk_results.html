@@ -1,35 +1,18 @@
 {% load humanize %}
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Invoice Parser &mdash; Bulk Results</title>
+    <link rel="stylesheet" href="{% static 'invoices/css/base.css' %}">
     <style>
-        *, *::before, *::after { box-sizing: border-box; }
-        :root {
-            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
-            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
-            --green: #16a34a; --amber: #d97706; --red: #dc2626; --radius: 14px;
-        }
-        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+        main { max-width: 860px; }
 
-        {% include "invoices/partials/navbar_styles.html" %}
-
-        main { max-width: 860px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem; }
-
-        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
-        h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
-        p  { margin: 0.35rem 0; color: var(--muted); font-size: 0.92rem; }
-
-        .summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 1rem;
-            margin: 1rem 0;
-        }
-        .summary-item { border-radius: 10px; padding: 0.9rem 1rem; }
+        /* Summary tiles */
+        .summary       { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin: 1rem 0; }
+        .summary-item  { border-radius: 10px; padding: 0.9rem 1rem; }
         .summary-total   { background: #f8fafc; border: 1px solid #e2e8f0; }
         .summary-success { background: #f0fdf4; border: 1px solid #bbf7d0; }
         .summary-error   { background: #fef2f2; border: 1px solid #fecaca; }
@@ -39,40 +22,12 @@
         .summary-success .summary-value { color: var(--green); }
         .summary-error   .summary-value { color: var(--red); }
 
-        .output-path {
-            background: #f8fafc;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 0.6rem 0.9rem;
-            font-family: monospace;
-            font-size: 0.83rem;
-            color: var(--muted);
-            word-break: break-all;
-            margin: 0.5rem 0 1rem;
-        }
+        .output-path { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.9rem; font-family: monospace; font-size: 0.83rem; color: var(--muted); word-break: break-all; margin: 0.5rem 0 1rem; }
 
-        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        th { text-align: left; padding: 0.5rem 0.4rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--border); }
-        td { padding: 0.65rem 0.4rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
-        tr:last-child td { border-bottom: none; }
-
-        .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
-        .badge-amber { background: #fef3c7; color: #92400e; }
-        .badge-green { background: #dcfce7; color: #15803d; }
-
-        .error-list { list-style: none; padding: 0; margin: 0; }
+        /* Parse error list */
+        .error-list    { list-style: none; padding: 0; margin: 0; }
         .error-list li { padding: 0.5rem 0.75rem; background: #fef2f2; border-radius: 6px; margin-bottom: 0.4rem; font-size: 0.88rem; }
         .error-list li strong { color: var(--red); }
-
-        .btn { display: inline-block; padding: 0.6rem 1.3rem; border-radius: 8px; font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; text-decoration: none; }
-        .btn-primary { background: var(--blue); color: #fff; }
-        .btn-primary:hover { background: #1d4ed8; }
-        .btn-outline { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
-        .btn-outline:hover { background: #eff6ff; }
-
-        .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
-        a { color: var(--blue); text-decoration: none; }
-        a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>

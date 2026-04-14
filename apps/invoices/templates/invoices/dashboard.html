@@ -1,232 +1,45 @@
 {% load humanize %}
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Invoice Parser &mdash; Dashboard</title>
+    <link rel="stylesheet" href="{% static 'invoices/css/base.css' %}">
     <style>
-        *, *::before, *::after { box-sizing: border-box; }
+        main { max-width: 1140px; }
 
-        :root {
-            --bg:      #f1f5f9;
-            --surface: #ffffff;
-            --border:  #e2e8f0;
-            --text:    #0f172a;
-            --muted:   #64748b;
-            --blue:    #2563eb;
-            --green:   #16a34a;
-            --amber:   #d97706;
-            --red:     #dc2626;
-            --radius:  14px;
-        }
-
-        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
-
-        /* ── Nav ── */
-        {% include "invoices/partials/navbar_styles.html" %}
-
-        /* ── Layout ── */
-        main { max-width: 1140px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 1.5rem;
-            margin-bottom: 1.25rem;
-        }
-
-        h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
-        h2 { font-size: 1.1rem; margin: 0 0 1rem; }
-        p  { margin: 0.4rem 0; color: var(--muted); font-size: 0.92rem; }
-
-        /* ── Stat cards ── */
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 1rem;
-            margin: 1.25rem 0;
-        }
-        .stat {
-            border-radius: 12px;
-            padding: 1rem 1.1rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.3rem;
-        }
-        .stat-blue   { background: #eff6ff; border: 1px solid #bfdbfe; }
-        .stat-amber  { background: #fffbeb; border: 1px solid #fde68a; }
-        .stat-green  { background: #f0fdf4; border: 1px solid #bbf7d0; }
-        .stat-gray   { background: #f8fafc; border: 1px solid #e2e8f0; }
-        .stat-label  { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-        .stat-value  { font-size: 2rem; font-weight: 700; line-height: 1; }
+        /* Stat cards */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
+        .stat  { border-radius: 12px; padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; }
+        .stat-blue  { background: #eff6ff; border: 1px solid #bfdbfe; }
+        .stat-amber { background: #fffbeb; border: 1px solid #fde68a; }
+        .stat-green { background: #f0fdf4; border: 1px solid #bbf7d0; }
+        .stat-gray  { background: #f8fafc; border: 1px solid #e2e8f0; }
+        .stat-label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .stat-value { font-size: 2rem; font-weight: 700; line-height: 1; }
         .stat-blue  .stat-value { color: var(--blue); }
         .stat-amber .stat-value { color: var(--amber); }
         .stat-green .stat-value { color: var(--green); }
         .stat-gray  .stat-value { color: #475569; }
 
-        /* ── Progress bar ── */
-        .progress-wrap { margin: 0.5rem 0 0; }
-        .progress-track {
-            background: #e2e8f0;
-            border-radius: 99px;
-            height: 10px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            background: var(--green);
-            height: 100%;
-            border-radius: 99px;
-            transition: width 0.4s ease;
-        }
+        /* Progress bar */
+        .progress-wrap  { margin: 0.5rem 0 0; }
+        .progress-track { background: #e2e8f0; border-radius: 99px; height: 10px; overflow: hidden; }
+        .progress-fill  { background: var(--green); height: 100%; border-radius: 99px; transition: width 0.4s ease; }
         .progress-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem; }
 
-        /* ── Two-column grid ── */
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
-        @media (max-width: 680px) { .grid-2 { grid-template-columns: 1fr; } }
-
-        /* ── Form ── */
-        .upload-label {
-            display: block;
-            border: 2px dashed var(--border);
-            border-radius: 10px;
-            padding: 1.5rem;
-            text-align: center;
-            cursor: pointer;
-            color: var(--muted);
-            font-size: 0.9rem;
-            transition: border-color 0.2s, background 0.2s;
-        }
-        .upload-label:hover { border-color: var(--blue); background: #eff6ff; }
-        input[type="file"] { display: none; }
-        .upload-filename { font-size: 0.85rem; color: var(--blue); margin-top: 0.4rem; min-height: 1.2em; }
-
-        .btn {
-            display: inline-block;
-            padding: 0.6rem 1.3rem;
-            border-radius: 8px;
-            font: inherit;
-            font-size: 0.9rem;
-            cursor: pointer;
-            border: none;
-            font-weight: 600;
-        }
-        .btn-primary { background: var(--blue); color: #fff; }
-        .btn-primary:hover { background: #1d4ed8; }
-        .btn-outline { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
-        .btn-outline:hover { background: #eff6ff; }
-
-        .error-list { color: var(--red); font-size: 0.88rem; padding-left: 1.2rem; margin: 0.5rem 0; }
-
-        /* ── Table ── */
-        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        th { text-align: left; padding: 0.55rem 0.5rem; font-size: 0.78rem; text-transform: uppercase;
-             letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--border); }
-        td { padding: 0.7rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
-        tr:last-child td { border-bottom: none; }
-
-        .badge {
-            display: inline-block;
-            padding: 0.15rem 0.5rem;
-            border-radius: 99px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        .badge-green  { background: #dcfce7; color: #15803d; }
-        .badge-amber  { background: #fef3c7; color: #92400e; }
-        .badge-gray   { background: #f1f5f9; color: #475569; }
-
-        a { color: var(--blue); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-
-        .empty-state {
-            text-align: center;
-            padding: 2.5rem 1rem;
-            color: var(--muted);
-        }
-        .empty-state .icon { font-size: 2.5rem; display: block; margin-bottom: 0.5rem; }
-        .empty-state strong { display: block; color: var(--text); margin-bottom: 0.4rem; font-size: 1rem; }
-        .workflow-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 1rem;
-        }
-        .workflow-card {
-            text-decoration: none;
-            display: block;
-            min-width: 0;
-        }
+        /* Workflow grid */
+        .workflow-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+        .workflow-card { text-decoration: none; display: block; min-width: 0; }
         .workflow-number {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 1.9rem;
-            height: 1.9rem;
-            border-radius: 999px;
-            font-size: 0.85rem;
-            font-weight: 700;
-            background: #eff6ff;
-            color: var(--blue);
-            margin-bottom: 0.7rem;
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 1.9rem; height: 1.9rem; border-radius: 999px;
+            font-size: 0.85rem; font-weight: 700;
+            background: #eff6ff; color: var(--blue); margin-bottom: 0.7rem;
         }
-        .workflow-meta {
-            margin-top: 0.8rem;
-            font-size: 0.82rem;
-            color: var(--muted);
-        }
-        .workflow-card-static {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            grid-column: span 2;
-        }
-        .setup-actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.75rem;
-            width: 100%;
-            margin-top: 1rem;
-        }
-        .setup-link {
-            display: block;
-            padding: 0.9rem 1rem;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            background: #f8fafc;
-            text-decoration: none;
-            transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
-        }
-        .setup-link:hover {
-            border-color: #bfdbfe;
-            background: #eff6ff;
-            text-decoration: none;
-            transform: translateY(-1px);
-        }
-        .setup-link-title {
-            display: block;
-            margin-bottom: 0.2rem;
-            font-size: 0.95rem;
-            font-weight: 700;
-            color: var(--text);
-        }
-        .setup-link-copy {
-            display: block;
-            font-size: 0.84rem;
-            color: var(--muted);
-            line-height: 1.45;
-            overflow-wrap: anywhere;
-        }
-        @media (max-width: 980px) {
-            .workflow-card-static {
-                grid-column: span 1;
-            }
-        }
-        @media (max-width: 680px) {
-            .setup-actions {
-                grid-template-columns: 1fr;
-            }
-        }
+        .workflow-meta { margin-top: 0.8rem; font-size: 0.82rem; color: var(--muted); }
     </style>
 </head>
 <body>

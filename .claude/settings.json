@@ -11,7 +11,8 @@
       "Bash(.venv/bin/python -c ':*)",
       "Bash(grep -n \"Parse PDFs and capture\\\\|Resolve missing invoice\\\\|once the code audit step is clean\\\\|with room for a submit step\\\\|Totals use approved GL codes where available, falling back\" /home/samgeegamwise/code/MIMG/invoice_parser_project/apps/invoices/templates/invoices/*.html)",
       "Bash(python3 -c \"import pdfplumber; help\\(pdfplumber.open\\)\")",
-      "Bash(make clear-history:*)"
+      "Bash(make clear-history:*)",
+      "Bash(grep -rln \"load static\" /home/samgeegamwise/code/MIMG/invoice_parser_project/apps/invoices/templates/invoices/*.html)"
     ]
   }
 }

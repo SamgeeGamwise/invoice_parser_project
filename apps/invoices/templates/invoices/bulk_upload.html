@@ -1,148 +1,62 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Invoice Parser &mdash; Upload Invoices</title>
+    <link rel="stylesheet" href="{% static 'invoices/css/base.css' %}">
     <style>
-        *, *::before, *::after { box-sizing: border-box; }
-        :root {
-            --bg: #f1f5f9; --surface: #ffffff; --border: #e2e8f0;
-            --text: #0f172a; --muted: #64748b; --blue: #2563eb;
-            --green: #16a34a; --red: #dc2626; --radius: 14px;
-        }
-        body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+        main { max-width: 680px; }
+        .card { padding: 1.75rem; }
 
-        {% include "invoices/partials/navbar_styles.html" %}
-
-        main { max-width: 680px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-
-        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.75rem; margin-bottom: 1.25rem; }
-        h1 { font-size: 1.4rem; margin: 0 0 0.5rem; }
-        p  { margin: 0.4rem 0; color: var(--muted); font-size: 0.92rem; line-height: 1.6; }
-
+        /* Upload drop zone */
         .upload-zone {
-            background: #f8fafc;
-            border: 2px dashed var(--border);
-            border-radius: 12px;
-            padding: 2.25rem 1.5rem;
-            cursor: pointer;
-            color: var(--muted);
-            transition: border-color 0.2s, background 0.2s;
-            margin: 1.25rem 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0.35rem;
+            background: #f8fafc; border: 2px dashed var(--border); border-radius: 12px;
+            padding: 2.25rem 1.5rem; cursor: pointer; color: var(--muted);
+            transition: border-color 0.2s, background 0.2s; margin: 1.25rem 0;
+            display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
         }
-        .upload-zone:hover { border-color: var(--blue); background: #eff6ff; }
-        .upload-zone.has-files { border-color: var(--green); background: #f0fdf4; }
-        .upload-zone .icon { font-size: 2.25rem; line-height: 1; }
+        .upload-zone:hover       { border-color: var(--blue); background: #eff6ff; }
+        .upload-zone.has-files   { border-color: var(--green); background: #f0fdf4; }
+        .upload-zone .icon       { font-size: 2.25rem; line-height: 1; }
         .upload-zone .upload-title { font-weight: 600; color: var(--text); font-size: 0.95rem; }
-        .upload-zone .upload-hint { font-size: 0.83rem; }
+        .upload-zone .upload-hint  { font-size: 0.83rem; }
         input[type="file"] { display: none; }
         .file-list { font-size: 0.85rem; color: #15803d; font-weight: 600; }
 
-        .btn { display: inline-block; padding: 0.65rem 1.5rem; border-radius: 8px; font: inherit;
-               font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; }
-        .btn-primary { background: var(--blue); color: #fff; width: 100%; margin-top: 0.5rem; font-size: 1rem; padding: 0.8rem; }
-        .btn-primary:hover { background: #1d4ed8; }
-        .btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+        /* Full-width submit button */
+        .btn-primary { width: 100%; margin-top: 0.5rem; font-size: 1rem; padding: 0.8rem; }
 
         .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; font-size: 0.88rem; color: #1e40af; }
         .info-box strong { display: block; margin-bottom: 0.25rem; }
 
-        .error-list { color: var(--red); font-size: 0.88rem; padding-left: 1.2rem; margin: 0.5rem 0; }
-
-        a { color: var(--blue); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-
-        /* ── Loading overlay ── */
-        .loading-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.55);
-            backdrop-filter: blur(2px);
-            z-index: 100;
-            align-items: center;
-            justify-content: center;
-        }
+        /* Loading overlay */
+        .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55); backdrop-filter: blur(2px); z-index: 100; align-items: center; justify-content: center; }
         .loading-overlay.visible { display: flex; }
-
-        .loading-card {
-            background: var(--surface);
-            border-radius: 16px;
-            padding: 2.25rem 2.5rem;
-            width: min(460px, 92vw);
-            text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-        }
-        .loading-card .spinner {
-            font-size: 2.5rem;
-            display: block;
-            margin-bottom: 1rem;
-            animation: spin 2s linear infinite;
-        }
+        .loading-card { background: var(--surface); border-radius: 16px; padding: 2.25rem 2.5rem; width: min(460px, 92vw); text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+        .loading-card .spinner { font-size: 2.5rem; display: block; margin-bottom: 1rem; animation: spin 2s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-
-        .loading-card h2 { font-size: 1.15rem; margin: 0 0 0.25rem; }
+        .loading-card h2  { font-size: 1.15rem; margin: 0 0 0.25rem; }
         .loading-card .sub { font-size: 0.88rem; color: var(--muted); margin: 0 0 1.25rem; }
 
-        /* Determinate progress bar */
-        .progress-track {
-            background: #e2e8f0;
-            border-radius: 99px;
-            height: 12px;
-            overflow: hidden;
-            margin-bottom: 0.5rem;
-        }
-        .progress-fill {
-            height: 100%;
-            border-radius: 99px;
-            background: var(--blue);
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-        .progress-fill.indeterminate {
-            width: 40%;
-            animation: slide 1.6s ease-in-out infinite;
-        }
-        @keyframes slide {
-            0%   { transform: translateX(-100%); }
-            100% { transform: translateX(350%); }
-        }
-        .progress-label {
-            font-size: 0.82rem;
-            color: var(--muted);
-            margin-bottom: 1rem;
-            min-height: 1.2em;
-        }
-        .current-file {
-            font-size: 0.8rem;
-            color: var(--muted);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            margin-bottom: 1rem;
-            min-height: 1.1em;
-        }
-
-        .error-tally {
-            font-size: 0.82rem;
-            color: var(--red);
-            min-height: 1em;
-            margin-bottom: 0.5rem;
-        }
-        .loading-warn { font-size: 0.78rem; color: var(--muted); margin-top: 0.75rem; }
+        /* Progress bar */
+        .progress-track { background: #e2e8f0; border-radius: 99px; height: 12px; overflow: hidden; margin-bottom: 0.5rem; }
+        .progress-fill  { height: 100%; border-radius: 99px; background: var(--blue); width: 0%; transition: width 0.3s ease; }
+        .progress-fill.indeterminate { width: 40%; animation: slide 1.6s ease-in-out infinite; }
+        @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+        .progress-label { font-size: 0.82rem; color: var(--muted); margin-bottom: 1rem; min-height: 1.2em; }
+        .current-file   { font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1rem; min-height: 1.1em; }
+        .error-tally    { font-size: 0.82rem; color: var(--red); min-height: 1em; margin-bottom: 0.5rem; }
+        .loading-warn   { font-size: 0.78rem; color: var(--muted); margin-top: 0.75rem; }
 
         /* Done state */
-        .done-icon { font-size: 2.5rem; display: block; margin-bottom: 0.75rem; }
-        .done-stats { display: flex; justify-content: center; gap: 1.5rem; margin: 1rem 0; }
-        .done-stat { text-align: center; }
+        .done-icon    { font-size: 2.5rem; display: block; margin-bottom: 0.75rem; }
+        .done-stats   { display: flex; justify-content: center; gap: 1.5rem; margin: 1rem 0; }
+        .done-stat    { text-align: center; }
         .done-stat .val { font-size: 1.8rem; font-weight: 700; line-height: 1; }
         .done-stat .lbl { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-        .done-stat.ok .val { color: var(--green); }
+        .done-stat.ok .val  { color: var(--green); }
         .done-stat.err .val { color: var(--red); }
         .done-actions { display: flex; justify-content: center; gap: 0.75rem; margin-top: 1.25rem; flex-wrap: wrap; }
     </style>
