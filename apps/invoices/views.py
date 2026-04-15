@@ -780,7 +780,7 @@ def gl_codes_view(request: HttpRequest) -> HttpResponse:
                         code=code,
                         defaults={
                             "description": description,
-                            "in_review_range": ReferenceDataSyncService()._in_review_range(code),
+                            "in_review_range": ReferenceDataSyncService().in_review_range(code),
                         },
                     )
                     imported += 1

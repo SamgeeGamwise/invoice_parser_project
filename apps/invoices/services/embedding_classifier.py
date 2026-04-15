@@ -315,16 +315,3 @@ def score_against_approved_history(
         votes[gl_code] = votes.get(gl_code, 0.0) + sim
 
     return votes
-
-
-def clear_gl_cache() -> None:
-    """Discard cached GL description embeddings (call after reference data sync)."""
-    with _gl_cache_lock:
-        _gl_cache.clear()
-
-
-def clear_history_cache() -> None:
-    """Force the approved history cache to rebuild on next classification."""
-    global _history_cache_count
-    with _history_lock:
-        _history_cache_count = -1

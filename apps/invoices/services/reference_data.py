@@ -23,8 +23,8 @@ class ReferenceDataSyncService:
 
     def sync_all(self, force: bool = False) -> None:
         with self._sync_lock:
-            self.sync_gl_accounts(force=force)
-            self.sync_property_references(force=force)
+            self._sync_gl_accounts(force=force)
+            self._sync_property_references(force=force)
 
     def ensure_loaded(self) -> None:
         if not GLAccount.objects.exists() or not PropertyReference.objects.exists():
@@ -33,7 +33,7 @@ class ReferenceDataSyncService:
                 "Import them via the GL Codes and Properties pages before processing invoices."
             )
 
-    def sync_gl_accounts(self, force: bool = False) -> None:
+    def _sync_gl_accounts(self, force: bool = False) -> None:
         if not force and GLAccount.objects.exists():
             return
         rows = self.spreadsheet_reader.read_rows(settings.REFERENCE_DATA_DIR / "GL List.xlsx")
@@ -50,11 +50,11 @@ class ReferenceDataSyncService:
                 code=code.strip(),
                 defaults={
                     "description": description.strip(),
-                    "in_review_range": self._in_review_range(code.strip()),
+                    "in_review_range": self.in_review_range(code.strip()),
                 },
             )
 
-    def sync_property_references(self, force: bool = False) -> None:
+    def _sync_property_references(self, force: bool = False) -> None:
         if not force and PropertyReference.objects.exists():
             return
         rows = self.spreadsheet_reader.read_rows(settings.REFERENCE_DATA_DIR / "Property List.xlsx")
@@ -94,6 +94,6 @@ class ReferenceDataSyncService:
     def normalize_property_code(self, value: str) -> str:
         return value.strip().upper()
 
-    def _in_review_range(self, code: str) -> bool:
+    def in_review_range(self, code: str) -> bool:
         cfg = settings.ML_CONFIG
         return code.isdigit() and cfg["REVIEW_RANGE_MIN"] <= int(code) <= cfg["REVIEW_RANGE_MAX"]

@@ -11,9 +11,6 @@ class ProjectDataCatalogService:
     future file-discovery logic, fixture selection, and reference-data loading.
     """
 
-    def list_sample_invoices(self) -> list[str]:
-        return self._list_filenames(settings.SAMPLE_INVOICES_DIR, "*.pdf")
-
     def list_reference_files(self) -> list[str]:
         return self._list_filenames(settings.REFERENCE_DATA_DIR, "*")
 
