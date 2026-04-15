@@ -5,7 +5,7 @@ from apps.invoices.models import GLAccount, Invoice, InvoiceLineItem, PropertyRe
 
 
 class Command(BaseCommand):
-    help = "Delete invoice data. Use --all to also wipe GL codes and property references."
+    help = "Delete invoice data, reference codes, or both."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -18,25 +18,39 @@ class Command(BaseCommand):
             action="store_true",
             help="Also delete GL accounts and property references.",
         )
+        parser.add_argument(
+            "--codes-only",
+            action="store_true",
+            help="Delete GL accounts and property references without deleting invoices.",
+        )
 
     def handle(self, *args, **options):
         wipe_all = options["all"]
+        codes_only = options["codes_only"]
 
-        invoice_count = Invoice.objects.count()
-        line_item_count = InvoiceLineItem.objects.count()
-        gl_count = GLAccount.objects.count() if wipe_all else 0
-        prop_count = PropertyReference.objects.count() if wipe_all else 0
+        if wipe_all and codes_only:
+            self.stderr.write("Choose either --all or --codes-only, not both.")
+            return
+
+        clear_invoices = not codes_only
+        clear_codes = wipe_all or codes_only
+
+        invoice_count = Invoice.objects.count() if clear_invoices else 0
+        line_item_count = InvoiceLineItem.objects.count() if clear_invoices else 0
+        gl_count = GLAccount.objects.count() if clear_codes else 0
+        prop_count = PropertyReference.objects.count() if clear_codes else 0
 
         if invoice_count == 0 and line_item_count == 0 and gl_count == 0 and prop_count == 0:
             self.stdout.write("Nothing to clear.")
             return
 
-        self.stdout.write(
-            f"This will delete {invoice_count} invoice(s) and {line_item_count} line item(s)."
-        )
-        if wipe_all:
+        if clear_invoices:
             self.stdout.write(
-                f"Also deleting {gl_count} GL account(s) and {prop_count} property reference(s)."
+                f"This will delete {invoice_count} invoice(s) and {line_item_count} line item(s)."
+            )
+        if clear_codes:
+            self.stdout.write(
+                f"This will delete {gl_count} GL account(s) and {prop_count} property reference(s)."
             )
 
         if not options["yes"]:
@@ -45,20 +59,24 @@ class Command(BaseCommand):
                 self.stdout.write("Cancelled.")
                 return
 
-        InvoiceLineItem.objects.all().delete()
-        Invoice.objects.all().delete()
+        if clear_invoices:
+            InvoiceLineItem.objects.all().delete()
+            Invoice.objects.all().delete()
 
-        if wipe_all:
+        if clear_codes:
             GLAccount.objects.all().delete()
             PropertyReference.objects.all().delete()
 
         # Also wipe the JSON snapshot so it doesn't show stale data.
         json_path = settings.PARSED_INVOICES_JSON
-        if json_path.exists():
+        if clear_invoices and json_path.exists():
             json_path.unlink()
             self.stdout.write(f"Removed {json_path}")
 
-        msg = f"Cleared {invoice_count} invoice(s) and {line_item_count} line item(s)."
-        if wipe_all:
-            msg += f" Also cleared {gl_count} GL account(s) and {prop_count} property reference(s)."
+        msg_parts = []
+        if clear_invoices:
+            msg_parts.append(f"Cleared {invoice_count} invoice(s) and {line_item_count} line item(s).")
+        if clear_codes:
+            msg_parts.append(f"Cleared {gl_count} GL account(s) and {prop_count} property reference(s).")
+        msg = " ".join(msg_parts)
         self.stdout.write(self.style.SUCCESS(msg))

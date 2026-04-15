@@ -135,7 +135,7 @@
             <a class="workflow-card" href="{% url 'invoices:yardi_submit' %}">
                 <span class="workflow-number">5</span>
                 <h2>Submit to Yardi</h2>
-                <p>Generate upload file and audit CSV.</p>
+                <p>Generate upload file and audit PDF.</p>
                 <div class="workflow-meta">{% if stats.pending_review_count == 0 and stats.invoice_count > 0 %}<span style="color:var(--green);font-weight:600;">Ready</span>{% elif stats.pending_review_count %}{{ stats.pending_review_count }} still pending{% else %}No invoices in batch{% endif %}</div>
             </a>
         </div></div>

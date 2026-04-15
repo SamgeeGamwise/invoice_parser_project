@@ -46,7 +46,6 @@
                 <p>GL codes found on uploaded invoices. Any codes not in your GL table must be added before approval.</p>
             </div>
             <div class="stats" style="margin-top:0;">
-                <span class="pill pill-blue">{{ gl_audit_total_codes }} unique code{{ gl_audit_total_codes|pluralize }}</span>
                 <span class="pill pill-amber">{{ gl_audit_missing_invoices }} invoice{{ gl_audit_missing_invoices|pluralize }} blocked by missing GL setup</span>
             </div>
         </div>
@@ -109,7 +108,6 @@
                 <p>Property codes found on invoices that have no matching reference. Add a new property or link to an existing one.</p>
             </div>
             <div class="stats" style="margin-top:0;">
-                <span class="pill pill-blue">{{ property_audit_total_codes }} unique code{{ property_audit_total_codes|pluralize }}</span>
                 <span class="pill pill-red">{{ property_audit_missing_invoices }} invoice{{ property_audit_missing_invoices|pluralize }} still need property validation</span>
             </div>
         </div>

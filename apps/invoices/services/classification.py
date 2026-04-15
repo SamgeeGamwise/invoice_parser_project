@@ -1,3 +1,5 @@
+import math
+
 from django.conf import settings
 
 from ..models import GLAccount
@@ -83,14 +85,24 @@ class LineItemGLClassifierService:
         top_score = scored[0].score
         second_score = scored[1].score if len(scored) > 1 else 0.0
         score_gap = max(0.0, top_score - second_score)
+        top_candidates = scored[:3]
+        temperature = 2.0
+        softmax_weights = [
+            math.exp((suggestion.score - top_score) / temperature)
+            for suggestion in top_candidates
+        ]
+        softmax_total = sum(softmax_weights) or 1.0
 
-        for suggestion in scored[:3]:
-            confidence = min(0.95, 0.35 + (suggestion.score / max(top_score, 1.0)) * 0.35)
+        for index, suggestion in enumerate(top_candidates):
+            score_strength = suggestion.score / (suggestion.score + 3.0)
+            relative_strength = softmax_weights[index] / softmax_total
+            confidence = 0.35 + (score_strength * 0.25) + (relative_strength * 0.25)
             if suggestion.gl_code == scored[0].gl_code:
-                confidence += min(0.2, score_gap * 0.05)
-            suggestion.confidence = round(confidence, 2)
+                margin_strength = score_gap / (score_gap + 2.0) if score_gap else 0.0
+                confidence += margin_strength * 0.20
+            suggestion.confidence = round(min(0.95, confidence), 2)
 
-        return scored[:3]
+        return top_candidates
 
     def _non_product_suggestions(
         self,

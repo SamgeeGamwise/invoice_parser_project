@@ -1,11 +1,10 @@
 """Yardi submission service.
 
 Identifies all fully-approved invoices, writes a timestamped Yardi JSON upload
-file and an audit CSV, then deletes the submitted invoices from the database so
+file and an audit PDF, then deletes the submitted invoices from the database so
 they no longer appear in the review queue.  Incomplete invoices are left in place.
 """
 
-import csv
 import json
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -139,7 +138,7 @@ class YardiSubmitService:
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
         json_path = self.output_dir / f"yardi_upload_{stamp}.json"
-        audit_path = self.output_dir / f"yardi_audit_{stamp}.csv"
+        audit_path = self.output_dir / f"yardi_audit_{stamp}.pdf"
 
         # Write files BEFORE deleting invoices. If a write fails, invoices are preserved.
         try:
@@ -165,7 +164,7 @@ class YardiSubmitService:
         )
 
     # ------------------------------------------------------------------
-    # Entry builder (shared by preview, JSON, and CSV)
+    # Entry builder (shared by preview, JSON, and PDF)
     # ------------------------------------------------------------------
 
     def _build_entries(self, invoices: list[Invoice]) -> list[dict]:
@@ -218,42 +217,144 @@ class YardiSubmitService:
             json.dump(payload, fh, indent=2, default=_json_default)
 
     # ------------------------------------------------------------------
-    # Audit CSV output
+    # Audit PDF output
     # ------------------------------------------------------------------
 
     def _write_audit(self, entries: list[dict], now: datetime, path: Path) -> None:
         submitted_at_str = now.strftime("%Y-%m-%d %H:%M:%S UTC")
-        with path.open("w", newline="", encoding="utf-8") as fh:
-            writer = csv.writer(fh)
+        total_amount = sum(e["amount"] for e in entries)
+        pages = self._build_audit_pdf_pages(entries, submitted_at_str, total_amount)
+        self._write_pdf(path, pages)
 
-            writer.writerow([
-                "Date",
-                "Property (Yardi Code)",
-                "GL Code",
-                "GL Description",
-                "Amount",
-                "Invoice Reference",
-                "Submitted By",
-                "Submitted At",
-            ])
+    def _build_audit_pdf_pages(
+        self,
+        entries: list[dict],
+        submitted_at_str: str,
+        total_amount: Decimal,
+    ) -> list[str]:
+        rows_per_page = 24
+        chunks = [
+            entries[index:index + rows_per_page]
+            for index in range(0, len(entries), rows_per_page)
+        ] or [[]]
+        pages = []
 
-            for e in entries:
-                writer.writerow([
-                    e["date"].isoformat() if e["date"] else "",
-                    e["property_yardi_code"],
-                    e["gl_code"],
-                    e["gl_description"],
-                    str(e["amount"]),
-                    e["reference"],
-                    SUBMITTED_BY,
-                    submitted_at_str,
-                ])
+        for page_number, chunk in enumerate(chunks, start=1):
+            commands: list[str] = []
+            self._pdf_text(commands, 36, 570, "Yardi Submission Audit", size=18, bold=True)
+            self._pdf_text(commands, 36, 548, f"Submitted by: {SUBMITTED_BY}", size=9)
+            self._pdf_text(commands, 36, 534, f"Submitted at: {submitted_at_str}", size=9)
+            self._pdf_text(commands, 36, 520, f"Entries: {len(entries)}", size=9)
+            self._pdf_text(commands, 150, 520, f"Total: ${total_amount:.2f}", size=9, bold=True)
+            self._pdf_text(commands, 700, 570, f"Page {page_number} of {len(chunks)}", size=9)
+            self._pdf_line(commands, 36, 505, 756, 505)
 
-            writer.writerow([])
-            writer.writerow([
-                "TOTAL", "", "", "",
-                str(sum(e["amount"] for e in entries)),
-                f"{len(entries)} entries",
-                SUBMITTED_BY,
-                submitted_at_str,
-            ])
+            columns = [
+                ("Date", 36),
+                ("Property", 100),
+                ("GL", 168),
+                ("GL Description", 218),
+                ("Amount", 500),
+                ("Invoice Ref", 590),
+            ]
+            for label, x in columns:
+                self._pdf_text(commands, x, 486, label, size=8, bold=True)
+            self._pdf_line(commands, 36, 478, 756, 478)
+
+            y = 460
+            for entry in chunk:
+                description = self._truncate(entry["gl_description"], 44)
+                self._pdf_text(commands, 36, y, entry["date"].isoformat() if entry["date"] else "", size=8)
+                self._pdf_text(commands, 100, y, entry["property_yardi_code"], size=8)
+                self._pdf_text(commands, 168, y, entry["gl_code"], size=8)
+                self._pdf_text(commands, 218, y, description, size=8)
+                self._pdf_text(commands, 500, y, f"${entry['amount']:.2f}", size=8)
+                self._pdf_text(commands, 590, y, entry["reference"], size=8)
+                self._pdf_line(commands, 36, y - 8, 756, y - 8)
+                y -= 16
+
+            pages.append("\n".join(commands))
+
+        return pages
+
+    def _write_pdf(self, path: Path, page_streams: list[str]) -> None:
+        objects: list[bytes] = []
+
+        def add_object(payload: str | bytes) -> int:
+            if isinstance(payload, str):
+                payload = payload.encode("latin-1", errors="replace")
+            objects.append(payload)
+            return len(objects)
+
+        catalog_id = add_object("")
+        pages_id = add_object("")
+        font_regular_id = add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+        font_bold_id = add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>")
+        page_ids = []
+
+        for stream in page_streams:
+            stream_bytes = stream.encode("latin-1", errors="replace")
+            content_id = add_object(
+                b"<< /Length " + str(len(stream_bytes)).encode("ascii") + b" >>\nstream\n"
+                + stream_bytes
+                + b"\nendstream"
+            )
+            page_id = add_object(
+                (
+                    f"<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 792 612] "
+                    f"/Resources << /Font << /F1 {font_regular_id} 0 R /F2 {font_bold_id} 0 R >> >> "
+                    f"/Contents {content_id} 0 R >>"
+                )
+            )
+            page_ids.append(page_id)
+
+        objects[catalog_id - 1] = f"<< /Type /Catalog /Pages {pages_id} 0 R >>".encode("latin-1")
+        kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+        objects[pages_id - 1] = f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>".encode("latin-1")
+
+        output = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+        offsets = [0]
+        for index, payload in enumerate(objects, start=1):
+            offsets.append(len(output))
+            output.extend(f"{index} 0 obj\n".encode("ascii"))
+            output.extend(payload)
+            output.extend(b"\nendobj\n")
+
+        xref_offset = len(output)
+        output.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+        output.extend(b"0000000000 65535 f \n")
+        for offset in offsets[1:]:
+            output.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+        output.extend(
+            (
+                f"trailer\n<< /Size {len(objects) + 1} /Root {catalog_id} 0 R >>\n"
+                f"startxref\n{xref_offset}\n%%EOF\n"
+            ).encode("ascii")
+        )
+
+        path.write_bytes(output)
+
+    def _pdf_text(
+        self,
+        commands: list[str],
+        x: int,
+        y: int,
+        text: str,
+        *,
+        size: int,
+        bold: bool = False,
+    ) -> None:
+        font = "F2" if bold else "F1"
+        commands.append(f"BT /{font} {size} Tf {x} {y} Td ({self._pdf_escape(str(text))}) Tj ET")
+
+    def _pdf_line(self, commands: list[str], x1: int, y1: int, x2: int, y2: int) -> None:
+        commands.append(f"0.82 0.86 0.91 RG {x1} {y1} m {x2} {y2} l S 0 0 0 RG")
+
+    def _pdf_escape(self, value: str) -> str:
+        value = value.encode("latin-1", errors="replace").decode("latin-1")
+        return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    def _truncate(self, value: str, max_length: int) -> str:
+        if len(value) <= max_length:
+            return value
+        return value[: max_length - 3].rstrip() + "..."

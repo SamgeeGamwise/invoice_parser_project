@@ -67,7 +67,40 @@ class AmazonInvoiceParserService:
             grand_total=self._search_money(self.GRAND_TOTAL_PATTERN, raw_text),
             line_items=self._extract_line_items(raw_text),
         )
+        self._validate_invoice(parsed_invoice)
         return parsed_invoice
+
+    def _validate_invoice(self, parsed_invoice: ParsedInvoice) -> None:
+        missing_fields = []
+        if not parsed_invoice.invoice_number:
+            missing_fields.append("invoice number")
+        if not parsed_invoice.property_code_raw:
+            missing_fields.append("property code")
+        if not parsed_invoice.line_items:
+            missing_fields.append("line items")
+
+        if missing_fields:
+            missing = ", ".join(missing_fields)
+            raise ValueError(
+                "Unsupported invoice PDF. Could not identify required Amazon "
+                f"invoice field(s): {missing}."
+            )
+
+        has_invoice_context = any([
+            parsed_invoice.invoice_date,
+            parsed_invoice.purchase_date,
+            parsed_invoice.purchaser,
+            parsed_invoice.po_number,
+            parsed_invoice.subtotal is not None,
+            parsed_invoice.tax_total is not None,
+            parsed_invoice.grand_total is not None,
+        ])
+        if not has_invoice_context:
+            raise ValueError(
+                "Unsupported invoice PDF. It has an invoice number, property "
+                "code, and line-like rows, but no recognizable Amazon invoice "
+                "metadata or totals."
+            )
 
     def _extract_line_items(self, raw_text: str) -> list[InvoiceLineItem]:
         lines = [line.strip() for line in raw_text.splitlines() if line.strip()]

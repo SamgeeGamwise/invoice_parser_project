@@ -1,7 +1,11 @@
 from datetime import date
 from decimal import Decimal
+from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
@@ -12,6 +16,7 @@ from .services.classification import LineItemGLClassifierService
 from .services.invoice_parser import AmazonInvoiceParserService
 from .services.reference_data import ReferenceDataSyncService
 from .services.repository import InvoiceRepositoryService
+from .services.yardi_submit import YardiSubmitService
 
 
 SAMPLE_INVOICE_TEXT = """Invoice
@@ -61,6 +66,42 @@ class AmazonInvoiceParserServiceTests(TestCase):
         self.assertEqual(parsed_invoice.line_items[0].asin, "B08D39Z3CM")
         self.assertEqual(parsed_invoice.line_items[0].vendor, "Taiga Marketing, Inc")
         self.assertEqual(parsed_invoice.line_items[0].order_number, "114-8888272-4762604")
+
+    def test_parse_rejects_non_invoice_pdf_text(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported invoice PDF"):
+            AmazonInvoiceParserService().parse(
+                "BASIC RULES\nD&D Basic Rules, Version 1.0, Released November 2018"
+            )
+
+    def test_parse_allows_missing_gl_code(self) -> None:
+        raw_text = SAMPLE_INVOICE_TEXT.replace("Tax $ 8.70 GL code 6328\n", "Tax $ 8.70\n")
+
+        parsed_invoice = AmazonInvoiceParserService().parse(raw_text)
+
+        self.assertEqual(parsed_invoice.invoice_number, "1FD6-HNRM-7M69")
+        self.assertEqual(parsed_invoice.invoice_gl_code, "")
+        self.assertEqual(parsed_invoice.property_code_raw, "ssoh")
+        self.assertEqual(len(parsed_invoice.line_items), 1)
+
+    def test_parse_requires_property_code(self) -> None:
+        raw_text = SAMPLE_INVOICE_TEXT.replace("Tax $ 8.70 GL code 6328\n", "Tax $ 8.70\n")
+        raw_text = raw_text.replace("Property Code ssoh\n", "")
+
+        with self.assertRaisesRegex(ValueError, "property code"):
+            AmazonInvoiceParserService().parse(raw_text)
+
+    def test_parse_rejects_thin_invoice_shaped_text(self) -> None:
+        raw_text = """Invoice
+Invoice # ABC-123
+Property Code TEST
+Invoice details
+Item subtotal
+Description Qty Unit price before tax Tax
+1 Looks like a row but lacks supporting invoice context 1 $1.00 $1.00 0.000%
+"""
+
+        with self.assertRaisesRegex(ValueError, "no recognizable Amazon invoice metadata"):
+            AmazonInvoiceParserService().parse(raw_text)
 
 
 class ReferenceDataSyncServiceTests(TestCase):
@@ -143,6 +184,48 @@ class LineItemGLClassifierServiceTests(TestCase):
 
         self.assertEqual(suggestions[0].gl_code, "6332")
         self.assertTrue(any("KNN vote" in reason for reason in suggestions[0].reasons))
+
+    def test_strong_winner_confidence_can_reach_upper_cap(self) -> None:
+        classifier = LineItemGLClassifierService()
+        line_item = ParsedLineItem(
+            line_number=1,
+            description="TRU RED Copy Paper",
+            normalized_description="tru red copy paper",
+        )
+
+        with patch(
+            "apps.invoices.services.classification.embedding_classifier.score_description_against_gl",
+            return_value={"6332": 0.95, "6328": 0.05},
+        ), patch(
+            "apps.invoices.services.classification.embedding_classifier.score_against_approved_history",
+            return_value={"6332": 2.00},
+        ):
+            suggestions = classifier.suggest(line_item, invoice_gl_code="")
+
+        self.assertEqual(suggestions[0].gl_code, "6332")
+        self.assertEqual(suggestions[0].confidence, 0.95)
+
+    def test_confidence_values_spread_across_close_candidates(self) -> None:
+        classifier = LineItemGLClassifierService()
+        line_item = ParsedLineItem(
+            line_number=1,
+            description="Office supplies and recreation items",
+            normalized_description="office supplies and recreation items",
+        )
+
+        with patch(
+            "apps.invoices.services.classification.embedding_classifier.score_description_against_gl",
+            return_value={"6734": 0.90, "6332": 0.70, "6328": 0.30},
+        ), patch(
+            "apps.invoices.services.classification.embedding_classifier.score_against_approved_history",
+            return_value={},
+        ):
+            suggestions = classifier.suggest(line_item, invoice_gl_code="")
+
+        confidences = [suggestion.confidence for suggestion in suggestions]
+        self.assertEqual(len(set(confidences)), 3)
+        self.assertGreater(confidences[0], confidences[1])
+        self.assertGreater(confidences[1], confidences[2])
 
 
 class InvoiceRepositoryServiceTests(TestCase):
@@ -597,3 +680,79 @@ class RuntimeReferenceDataGuardTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "GL codes and/or property references have not been loaded")
+
+
+class ClearDataCommandTests(TestCase):
+    def setUp(self) -> None:
+        ReferenceDataSyncService().sync_all()
+        invoice_gl = GLAccount.objects.get(code="6328")
+        suggested_gl = GLAccount.objects.get(code="6734")
+        InvoiceRepositoryService().save_parsed_invoices([
+            ParsedInvoice(
+                source_file=SourceFileInfo(name="invoice.pdf", size_bytes=123),
+                invoice_number="CLEAR-CMD-1",
+                invoice_date=date(2026, 3, 31),
+                invoice_gl_code=invoice_gl.code,
+                invoice_gl_description=invoice_gl.description,
+                property_code_raw="ssoh",
+                property_code_normalized="SSOH",
+                property_code_validated=True,
+                line_items=[
+                    ParsedLineItem(
+                        line_number=1,
+                        description="Tetherball Set",
+                        normalized_description="tetherball set",
+                        line_total=Decimal("119.99"),
+                        suggested_gl_code=suggested_gl.code,
+                        suggested_gl_description=suggested_gl.description,
+                    )
+                ],
+            )
+        ])
+
+    def test_clear_invoices_preserves_reference_codes(self) -> None:
+        out = StringIO()
+
+        call_command("clear_data", "--yes", stdout=out)
+
+        self.assertEqual(Invoice.objects.count(), 0)
+        self.assertEqual(InvoiceLineItem.objects.count(), 0)
+        self.assertGreater(GLAccount.objects.count(), 0)
+        self.assertGreater(PropertyReference.objects.count(), 0)
+        self.assertIn("Cleared 1 invoice(s)", out.getvalue())
+
+    def test_clear_codes_only_preserves_invoice_data(self) -> None:
+        out = StringIO()
+
+        call_command("clear_data", "--yes", "--codes-only", stdout=out)
+
+        self.assertEqual(Invoice.objects.count(), 1)
+        self.assertEqual(InvoiceLineItem.objects.count(), 1)
+        self.assertEqual(GLAccount.objects.count(), 0)
+        self.assertEqual(PropertyReference.objects.count(), 0)
+        self.assertIn("Cleared", out.getvalue())
+        self.assertIn("GL account", out.getvalue())
+
+
+class YardiSubmitServiceTests(TestCase):
+    def test_audit_file_is_written_as_pdf(self) -> None:
+        service = YardiSubmitService()
+        entries = [
+            {
+                "property_yardi_code": "1234",
+                "gl_code": "6734",
+                "gl_description": "POOL / REC SUPPLIES",
+                "amount": Decimal("119.99"),
+                "date": date(2026, 3, 31),
+                "reference": "1FD6-HNRM-7M69",
+            }
+        ]
+
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "yardi_audit_test.pdf"
+            service._write_audit(entries, date(2026, 4, 15), path)
+            payload = path.read_bytes()
+
+        self.assertTrue(payload.startswith(b"%PDF-1.4"))
+        self.assertIn(b"Yardi Submission Audit", payload)
+        self.assertIn(b"1FD6-HNRM-7M69", payload)

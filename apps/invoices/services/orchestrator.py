@@ -70,6 +70,7 @@ class InvoiceProcessingService:
         self,
         file_objs: list[BinaryIO],
         progress_callback=None,
+        status_callback=None,
     ) -> BulkProcessingResult:
         """
         Parse many PDFs concurrently using a thread pool.
@@ -79,12 +80,17 @@ class InvoiceProcessingService:
 
         progress_callback(current, total, filename, status) is called after each
         file finishes ('ok' or 'error'). Used by the streaming view for SSE.
+        status_callback(message) is called during setup phases that may take a
+        while before the first file-level progress event is available.
         """
         self.reference_data.ensure_loaded()
 
         # Snapshot each file on the main thread before handing off.
+        if status_callback:
+            status_callback("Preparing uploaded PDF files...")
         snapshots = []
-        for f in file_objs:
+        total_files = len(file_objs)
+        for index, f in enumerate(file_objs, start=1):
             if hasattr(f, "seek"):
                 f.seek(0)
             snapshots.append((
@@ -93,6 +99,8 @@ class InvoiceProcessingService:
                 getattr(f, "content_type", ""),
                 BytesIO(f.read()),
             ))
+            if status_callback:
+                status_callback(f"Prepared {index} of {total_files} PDF files.")
 
         total = len(snapshots)
         invoices: list[ParsedInvoice] = []
@@ -109,6 +117,11 @@ class InvoiceProcessingService:
             parsed.status = "Parsed successfully."
             self._enrich(parsed)
             return parsed
+
+        if status_callback:
+            status_callback(
+                "Reading PDFs and generating GL suggestions. First run may take longer while the ML model loads."
+            )
 
         with ThreadPoolExecutor(max_workers=min(_MAX_WORKERS, len(snapshots))) as pool:
             future_map = {pool.submit(parse_one, snap): snap[0] for snap in snapshots}

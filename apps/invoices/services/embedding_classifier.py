@@ -33,6 +33,7 @@ Caching strategy:
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from typing import TYPE_CHECKING
 
@@ -45,28 +46,82 @@ logger = logging.getLogger(__name__)
 # ── Model singleton ──────────────────────────────────────────────────────────
 
 _model = None
+_model_load_attempted = False
 _model_lock = threading.Lock()
-_MODEL_NAME = "BAAI/bge-base-en-v1.5"
+_MODEL_NAME = os.environ.get(
+    "INVOICE_PARSER_EMBEDDING_MODEL",
+    "sentence-transformers/all-MiniLM-L6-v2",
+)
+_ALLOW_MODEL_DOWNLOAD = os.environ.get("INVOICE_PARSER_ALLOW_MODEL_DOWNLOAD") == "1"
+
+
+def _resolve_model_path() -> str | None:
+    if _ALLOW_MODEL_DOWNLOAD:
+        return _MODEL_NAME
+
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError:
+        return _MODEL_NAME
+
+    try:
+        return snapshot_download(
+            repo_id=_MODEL_NAME,
+            local_files_only=True,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Sentence-transformer model '%s' is not cached locally. "
+            "Embedding scores will be 0.0. To enable semantic scoring, cache it once with "
+            "INVOICE_PARSER_ALLOW_MODEL_DOWNLOAD=1. Original error: %s",
+            _MODEL_NAME,
+            exc,
+        )
+        return None
 
 
 def _get_model():
     """Return the shared model instance, loading it on first call."""
-    global _model
+    global _model, _model_load_attempted
     if _model is not None:
         return _model
+    if _model_load_attempted:
+        return None
     with _model_lock:
         if _model is not None:
             return _model
+        if _model_load_attempted:
+            return None
+        _model_load_attempted = True
         try:
+            if not _ALLOW_MODEL_DOWNLOAD:
+                os.environ.setdefault("HF_HUB_OFFLINE", "1")
+                os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+            model_path = _resolve_model_path()
+            if model_path is None:
+                _model = None
+                return None
             from sentence_transformers import SentenceTransformer
             logger.info("Loading sentence-transformer model '%s'…", _MODEL_NAME)
-            _model = SentenceTransformer(_MODEL_NAME)
+            _model = SentenceTransformer(
+                model_path,
+                local_files_only=not _ALLOW_MODEL_DOWNLOAD,
+            )
             logger.info("Model loaded.")
         except ImportError:
             logger.warning(
                 "sentence-transformers is not installed. "
                 "Embedding scores will be 0.0. "
                 "Run: pip install sentence-transformers"
+            )
+            _model = None
+        except Exception as exc:
+            logger.warning(
+                "Could not load sentence-transformer model '%s' from the local cache. "
+                "Embedding scores will be 0.0 until the model is available locally. "
+                "Original error: %s",
+                _MODEL_NAME,
+                exc,
             )
             _model = None
     return _model

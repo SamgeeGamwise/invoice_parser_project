@@ -187,7 +187,23 @@ def bulk_upload_view(request: HttpRequest) -> HttpResponse:
                             "status": status,
                         })
 
-                    result = processor.bulk_process(files, progress_callback=on_progress)
+                    def on_status(message):
+                        if stop_event.is_set():
+                            raise InterruptedError("Client disconnected; processing cancelled.")
+                        progress_q.put({
+                            "type": "status",
+                            "message": message,
+                        })
+
+                    progress_q.put({
+                        "type": "status",
+                        "message": "Starting invoice processing...",
+                    })
+                    result = processor.bulk_process(
+                        files,
+                        progress_callback=on_progress,
+                        status_callback=on_status,
+                    )
 
                     if stop_event.is_set():
                         return  # client left; skip the DB write
@@ -213,13 +229,20 @@ def bulk_upload_view(request: HttpRequest) -> HttpResponse:
             threading.Thread(target=run, daemon=True).start()
 
             def generate():
+                heartbeat_count = 0
                 try:
                     while True:
                         try:
-                            item = progress_q.get(timeout=120)  # 2-min timeout per event
+                            item = progress_q.get(timeout=15)
                         except queue.Empty:
-                            yield 'data: {"type":"fatal","error":"Processing timed out. Please try again."}\n\n'
-                            break
+                            heartbeat_count += 1
+                            elapsed = heartbeat_count * 15
+                            heartbeat = {
+                                "type": "heartbeat",
+                                "message": f"Still working... {elapsed} seconds elapsed.",
+                            }
+                            yield f"data: {json.dumps(heartbeat)}\n\n"
+                            continue
                         if item is None:
                             break
                         yield f"data: {json.dumps(item)}\n\n"
@@ -863,7 +886,7 @@ def yardi_submit_view(request: HttpRequest) -> HttpResponse:
     """Preview and confirm a Yardi submission.
 
     GET  — shows which invoices are ready and which are incomplete.
-    POST — runs the submission: writes JSON + audit CSV, deletes submitted
+    POST — runs the submission: writes JSON + audit PDF, deletes submitted
            invoices, and renders the success summary.
     """
     service = YardiSubmitService()

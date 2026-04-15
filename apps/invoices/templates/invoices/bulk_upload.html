@@ -208,6 +208,13 @@
                 fill.style.width = "98%";
                 progLabel.textContent = "Saving to database…";
                 currentFile.textContent = "";
+            } else if (evt.type === "status") {
+                progLabel.textContent = evt.message || "Working…";
+                currentFile.textContent = "";
+            } else if (evt.type === "heartbeat") {
+                if (fill.classList.contains("indeterminate")) {
+                    progLabel.textContent = evt.message || "Still working…";
+                }
             } else if (evt.type === "done") {
                 showDone(evt);
             } else if (evt.type === "fatal") {
