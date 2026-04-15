@@ -21,9 +21,28 @@
         th { padding: 0.5rem 0.4rem; }
         tr.reviewed-row { background: #f0fdf4; }
 
-        /* GL selector */
-        select { width: 100%; font: inherit; font-size: 0.85rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
-        select:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue); }
+        /* GL searchable combobox */
+        .gl-input {
+            width: 100%; min-height: 36px; padding: 0.4rem 0.55rem;
+            border: 1px solid var(--border); border-radius: 6px;
+            background: #fff; color: var(--text);
+            font: inherit; font-size: 0.85rem; box-sizing: border-box;
+        }
+        .gl-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+        .gl-input::placeholder { color: var(--muted); }
+        .gl-dropdown {
+            position: fixed; max-height: 220px; overflow-y: auto;
+            background: #fff; border: 1px solid var(--border);
+            border-radius: 8px; box-shadow: 0 8px 24px rgba(15,23,42,0.14);
+            z-index: 9999;
+        }
+        .gl-dropdown[hidden] { display: none; }
+        .gl-option { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.45rem 0.7rem; cursor: pointer; font-size: 0.83rem; }
+        .gl-option:hover, .gl-option.active { background: #eff6ff; }
+        .gl-opt-code { font-family: monospace; font-size: 0.8rem; font-weight: 700; color: var(--blue); white-space: nowrap; flex-shrink: 0; }
+        .gl-opt-desc { color: var(--text); font-size: 0.8rem; }
+        .gl-opt-desc em { font-style: normal; background: #fef08a; border-radius: 2px; padding: 0 1px; }
+        .gl-no-results { padding: 0.6rem 0.7rem; color: var(--muted); font-size: 0.82rem; }
 
         /* Confidence bar */
         .confidence-bar  { background: #e2e8f0; border-radius: 99px; height: 6px; margin: 0.3rem 0; overflow: hidden; }
@@ -48,7 +67,7 @@
 
     <!-- Invoice header -->
     <section class="card">
-        <p style="margin-bottom: 0.75rem;"><a href="{% url 'invoices:dashboard' %}">&larr; Back to dashboard</a></p>
+        <p style="margin-bottom: 0.75rem;"><a href="{% url 'invoices:review_queue' %}">&larr; Back to review queue</a></p>
         <h1>Invoice {{ invoice.invoice_number }}</h1>
         <p>Review the GL code suggestion for each line item below. Approve or override as needed, then save.</p>
 
@@ -240,20 +259,18 @@
                         </td>
 
                         <td>
-                            <label for="item_{{ item.id }}_gl" style="font-size: 0.78rem; color: var(--muted);">
+                            <label style="font-size: 0.78rem; color: var(--muted);">
                                 {% if item.approved_gl %}Approved GL{% else %}Select GL to approve{% endif %}
                             </label>
-                            <select id="item_{{ item.id }}_gl" name="item_{{ item.id }}_gl">
-                                <option value="">-- No approval yet --</option>
-                                {% for gl in gl_accounts %}
-                                <option value="{{ gl.code }}"
-                                    {% if item.approved_gl and item.approved_gl.code == gl.code %}selected
-                                    {% elif not item.approved_gl and item.suggested_gl and item.suggested_gl.code == gl.code %}selected
-                                    {% endif %}>
-                                    {{ gl.code }} &mdash; {{ gl.description }}
-                                </option>
-                                {% endfor %}
-                            </select>
+                            <div class="gl-search">
+                                <input type="text" class="gl-input"
+                                       placeholder="Search by name or code…"
+                                       autocomplete="off">
+                                <input type="hidden"
+                                       name="item_{{ item.id }}_gl"
+                                       id="sel_{{ item.id }}"
+                                       value="{% if item.approved_gl %}{{ item.approved_gl.code }}{% elif item.suggested_gl %}{{ item.suggested_gl.code }}{% endif %}">
+                            </div>
                         </td>
 
                     </tr>
@@ -292,5 +309,127 @@
     </details>
 
 </main>
+
+<script>
+    const GL_ACCOUNTS = [
+        {% for gl in gl_accounts %}{"code":"{{ gl.code|escapejs }}","desc":"{{ gl.description|escapejs }}"},
+        {% endfor %}
+    ];
+
+    const GL_PORTAL = document.createElement("div");
+    GL_PORTAL.className = "gl-dropdown";
+    GL_PORTAL.hidden = true;
+    document.body.appendChild(GL_PORTAL);
+    let portalOwner = null;
+
+    function glHighlight(text, query) {
+        if (!query) return text;
+        const idx = text.toLowerCase().indexOf(query.toLowerCase());
+        if (idx === -1) return text;
+        return text.slice(0, idx) + "<em>" + text.slice(idx, idx + query.length) + "</em>" + text.slice(idx + query.length);
+    }
+
+    class GLCombobox {
+        constructor(wrapper) {
+            this.input  = wrapper.querySelector(".gl-input");
+            this.hidden = wrapper.querySelector("input[type=hidden]");
+            this.active = -1;
+
+            const code = this.hidden.value;
+            if (code) {
+                const gl = GL_ACCOUNTS.find(g => g.code === code);
+                if (gl) this.input.value = `${gl.code} \u2013 ${gl.desc}`;
+            }
+
+            this.input.addEventListener("input",   () => this.search());
+            this.input.addEventListener("focus",   () => this.search());
+            this.input.addEventListener("keydown", e  => this.onKey(e));
+            this.input.addEventListener("blur",    () => setTimeout(() => { if (portalOwner === this) this.close(); }, 160));
+        }
+
+        search() {
+            portalOwner = this;
+            const q = this.input.value.trim().toLowerCase();
+            const results = GL_ACCOUNTS.filter(g =>
+                g.code.toLowerCase().includes(q) || g.desc.toLowerCase().includes(q)
+            ).slice(0, 60);
+
+            GL_PORTAL.innerHTML = results.length
+                ? results.map(gl =>
+                    `<div class="gl-option" data-code="${gl.code}">
+                        <span class="gl-opt-code">${glHighlight(gl.code, q)}</span>
+                        <span class="gl-opt-desc">${glHighlight(gl.desc, q)}</span>
+                    </div>`).join("")
+                : `<div class="gl-no-results">No matches for &ldquo;${this.input.value}&rdquo;</div>`;
+
+            GL_PORTAL.querySelectorAll(".gl-option").forEach(opt => {
+                opt.addEventListener("mousedown", e => { e.preventDefault(); this.select(opt.dataset.code); });
+            });
+
+            this.reposition();
+            GL_PORTAL.hidden = false;
+            this.active = -1;
+        }
+
+        reposition() {
+            const r = this.input.getBoundingClientRect();
+            GL_PORTAL.style.left  = r.left + "px";
+            GL_PORTAL.style.top   = (r.bottom + 3) + "px";
+            GL_PORTAL.style.width = r.width + "px";
+        }
+
+        select(code) {
+            const gl = GL_ACCOUNTS.find(g => g.code === code);
+            if (!gl) return;
+            this.hidden.value = code;
+            this.input.value  = `${gl.code} \u2013 ${gl.desc}`;
+            this.close();
+        }
+
+        close() {
+            GL_PORTAL.hidden = true;
+            portalOwner = null;
+            this.active = -1;
+        }
+
+        onKey(e) {
+            if (portalOwner !== this) return;
+            const opts = GL_PORTAL.querySelectorAll(".gl-option");
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                this.active = Math.min(this.active + 1, opts.length - 1);
+                this.highlight(opts);
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                this.active = Math.max(this.active - 1, 0);
+                this.highlight(opts);
+            } else if (e.key === "Enter" && this.active >= 0) {
+                e.preventDefault();
+                this.select(opts[this.active].dataset.code);
+            } else if (e.key === "Escape") {
+                this.close();
+            }
+        }
+
+        highlight(opts) {
+            opts.forEach((o, i) => o.classList.toggle("active", i === this.active));
+            if (this.active >= 0) opts[this.active].scrollIntoView({ block: "nearest" });
+        }
+    }
+
+    document.querySelectorAll(".gl-search").forEach(w => new GLCombobox(w));
+
+    document.addEventListener("click", e => {
+        if (!e.target.closest(".gl-search") && !GL_PORTAL.contains(e.target)) {
+            GL_PORTAL.hidden = true;
+            portalOwner = null;
+        }
+    });
+
+    window.addEventListener("scroll", () => {
+        if (!GL_PORTAL.hidden && portalOwner) portalOwner.reposition();
+    }, { passive: true });
+</script>
+
 </body>
 </html>

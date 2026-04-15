@@ -243,9 +243,9 @@
                 ${evt.errors > 0 ? `<p style="font-size:0.82rem;color:var(--red);margin:0 0 0.5rem;">${evt.error_list.map(e => e.filename).join(", ")}</p>` : ""}
                 <p style="font-size:0.8rem;color:var(--muted);margin:0 0 1rem;">JSON saved to: ${evt.output_path}</p>
                 <div class="done-actions">
-                    <a class="btn btn-primary" href="{% url 'invoices:property_audit' %}">Go to Code Audit</a>
-                    <a class="btn btn-outline" href="{% url 'invoices:review_queue' %}">Approval Queue</a>
+                    <a class="btn btn-primary" href="{% url 'invoices:review_queue' %}">Go to Approval Queue</a>
                     <a class="btn btn-outline" href="{% url 'invoices:dashboard' %}">Dashboard</a>
+                    <a class="btn btn-outline btn-sm" href="{% url 'invoices:property_audit' %}">Code Audit</a>
                 </div>
             `;
         }

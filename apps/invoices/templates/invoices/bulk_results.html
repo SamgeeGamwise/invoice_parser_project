@@ -60,9 +60,10 @@
         <div class="output-path">{{ output_path }}</div>
 
         <div class="actions">
-            <a class="btn btn-primary" href="{% url 'invoices:dashboard' %}">Go to Dashboard</a>
+            <a class="btn btn-primary" href="{% url 'invoices:review_queue' %}">Go to Approval Queue</a>
+            <a class="btn btn-outline" href="{% url 'invoices:dashboard' %}">Go to Dashboard</a>
             <a class="btn btn-outline" href="{% url 'invoices:bulk_upload' %}">Upload Another Batch</a>
-            <a class="btn btn-outline" href="{% url 'invoices:reports' %}">View Reports</a>
+            <a class="btn btn-outline btn-sm" href="{% url 'invoices:property_audit' %}">Code Audit</a>
         </div>
     </section>
 
