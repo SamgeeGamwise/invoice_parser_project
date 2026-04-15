@@ -17,13 +17,15 @@
         .stat-value { font-size: 1.45rem; font-weight: 700; color: var(--text); line-height: 1.2; }
 
         /* Bar chart */
-        .chart-header { display: grid; grid-template-columns: 220px 1fr 100px; gap: 0.75rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-bottom: 0.4rem; border-bottom: 2px solid var(--border); margin-bottom: 0.15rem; }
-        .chart-row    { display: grid; grid-template-columns: 220px 1fr 100px; gap: 0.75rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
+        .chart-header { display: grid; grid-template-columns: 220px 1fr 60px 100px; gap: 0.75rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-bottom: 0.4rem; border-bottom: 2px solid var(--border); margin-bottom: 0.15rem; }
+        .chart-row    { display: grid; grid-template-columns: 220px 1fr 60px 100px; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
         .chart-row:last-child { border-bottom: none; }
-        .chart-row-label  { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chart-row-label  { color: var(--text); min-width: 0; }
+        .chart-row-label-main { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .chart-bar-track  { background: #e2e8f0; border-radius: 99px; height: 10px; overflow: hidden; }
         .chart-bar-fill   { height: 100%; border-radius: 99px; background: var(--blue); }
         .chart-bar-fill.green { background: var(--green); }
+        .chart-row-count  { text-align: right; color: var(--muted); font-size: 0.82rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .chart-row-amount { text-align: right; font-weight: 600; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
         .show-all-row { padding: 0.6rem 0; font-size: 0.85rem; }
         .count-pill   { font-size: 0.78rem; color: var(--muted); }
@@ -81,16 +83,18 @@
             <div class="chart-header">
                 <span>GL Code</span>
                 <span>Breakdown</span>
+                <span style="text-align:right;">Items</span>
                 <span style="text-align:right;">Total</span>
             </div>
             {% for row in spend_by_gl %}
             <div class="chart-row">
                 <div class="chart-row-label" title="{{ row.gl_code }} — {{ row.gl_description }}">
-                    <strong>{{ row.gl_code }}</strong> &mdash; {{ row.gl_description }}
+                    <div class="chart-row-label-main"><strong>{{ row.gl_code }}</strong> &mdash; {{ row.gl_description }}</div>
                 </div>
                 <div class="chart-bar-track">
                     <div class="chart-bar-fill" style="width: {{ row.bar_pct }}%"></div>
                 </div>
+                <div class="chart-row-count">{{ row.line_item_count }}</div>
                 <div class="chart-row-amount">${{ row.total_amount|floatformat:2|intcomma }}</div>
             </div>
             {% endfor %}
@@ -127,14 +131,18 @@
             <div class="chart-header">
                 <span>Property</span>
                 <span>Breakdown</span>
+                <span style="text-align:right;">Items</span>
                 <span style="text-align:right;">Total</span>
             </div>
             {% for row in items_by_property %}
             <div class="chart-row">
-                <div class="chart-row-label">{{ row.property_code }}</div>
+                <div class="chart-row-label">
+                    <div class="chart-row-label-main">{{ row.property_code }}</div>
+                </div>
                 <div class="chart-bar-track">
                     <div class="chart-bar-fill green" style="width: {{ row.bar_pct }}%"></div>
                 </div>
+                <div class="chart-row-count">{{ row.line_item_count }}</div>
                 <div class="chart-row-amount">${{ row.total_amount|floatformat:2|intcomma }}</div>
             </div>
             {% endfor %}

@@ -30,16 +30,34 @@
         .progress-fill  { background: var(--green); height: 100%; border-radius: 99px; transition: width 0.4s ease; }
         .progress-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem; }
 
-        /* Workflow grid */
-        .workflow-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
-        .workflow-card { text-decoration: none; display: block; min-width: 0; }
+        /* Workflow strip */
+        .workflow-scroll { overflow-x: auto; margin: -0.25rem; padding: 0.25rem; }
+        .workflow-strip {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 0.75rem;
+            min-width: 680px;
+        }
+        .workflow-card {
+            text-decoration: none; display: flex; flex-direction: column;
+            gap: 0.45rem; padding: 1rem 1.1rem;
+            background: var(--surface-soft); border: 1px solid var(--border);
+            border-radius: 12px; transition: border-color 0.15s, box-shadow 0.15s;
+            min-width: 0;
+        }
+        .workflow-card:hover {
+            border-color: var(--blue); box-shadow: 0 4px 16px rgba(37,99,235,0.08);
+            text-decoration: none;
+        }
         .workflow-number {
             display: inline-flex; align-items: center; justify-content: center;
-            width: 1.9rem; height: 1.9rem; border-radius: 999px;
-            font-size: 0.85rem; font-weight: 700;
-            background: #eff6ff; color: var(--blue); margin-bottom: 0.7rem;
+            width: 1.75rem; height: 1.75rem; border-radius: 999px;
+            font-size: 0.8rem; font-weight: 700;
+            background: #eff6ff; color: var(--blue); flex-shrink: 0;
         }
-        .workflow-meta { margin-top: 0.8rem; font-size: 0.82rem; color: var(--muted); }
+        .workflow-card h2 { font-size: 0.92rem; margin: 0; color: var(--text); }
+        .workflow-card p  { font-size: 0.8rem; margin: 0; color: var(--muted); line-height: 1.4; }
+        .workflow-meta { font-size: 0.78rem; color: var(--muted); margin-top: auto; padding-top: 0.5rem; }
     </style>
 </head>
 <body>
@@ -88,53 +106,39 @@
 
     <section class="card">
         <h2>Workflow</h2>
-        <div class="workflow-grid">
+        <div class="workflow-scroll"><div class="workflow-strip">
 
-            <a class="card workflow-card" href="{% url 'invoices:bulk_upload' %}">
+            <a class="workflow-card" href="{% url 'invoices:bulk_upload' %}">
                 <span class="workflow-number">1</span>
-                <h2 style="margin-bottom:0.3rem;">Upload</h2>
-                <p>Parse invoice PDFs and load them into the batch.</p>
+                <h2>Upload</h2>
+                <p>Parse invoice PDFs into the batch.</p>
                 <div class="workflow-meta">{{ stats.invoice_count }} invoice{{ stats.invoice_count|pluralize }} in batch</div>
             </a>
-            <a class="card workflow-card" href="{% url 'invoices:property_audit' %}">
+            <a class="workflow-card" href="{% url 'invoices:property_audit' %}">
                 <span class="workflow-number">2</span>
-                <h2 style="margin-bottom:0.3rem;">Code Audit</h2>
+                <h2>Code Audit</h2>
                 <p>Resolve unmatched GL and property codes.</p>
-                <div class="workflow-meta">
-                    {% if total_audit_issues %}{{ total_audit_issues }} open issue{{ total_audit_issues|pluralize }}
-                    {% else %}Clean{% endif %}
-                </div>
+                <div class="workflow-meta">{% if total_audit_issues %}<span style="color:var(--amber);">{{ total_audit_issues }} open issue{{ total_audit_issues|pluralize }}</span>{% else %}<span style="color:var(--green);">Clean</span>{% endif %}</div>
             </a>
-            <a class="card workflow-card" href="{% url 'invoices:review_queue' %}">
+            <a class="workflow-card" href="{% url 'invoices:review_queue' %}">
                 <span class="workflow-number">3</span>
-                <h2 style="margin-bottom:0.3rem;">Approval Queue</h2>
-                <p>Assign and approve GL codes for each line item.</p>
-                <div class="workflow-meta">
-                    {% if stats.pending_review_count %}{{ stats.pending_review_count }} item{{ stats.pending_review_count|pluralize }} pending
-                    {% else %}All approved{% endif %}
-                </div>
+                <h2>Approval Queue</h2>
+                <p>Assign and approve GL codes per line item.</p>
+                <div class="workflow-meta">{% if stats.pending_review_count %}<span style="color:var(--amber);">{{ stats.pending_review_count }} pending</span>{% else %}<span style="color:var(--green);">All approved</span>{% endif %}</div>
             </a>
-            <a class="card workflow-card" href="{% url 'invoices:reports' %}">
+            <a class="workflow-card" href="{% url 'invoices:reports' %}">
                 <span class="workflow-number">4</span>
-                <h2 style="margin-bottom:0.3rem;">Reports</h2>
+                <h2>Reports</h2>
                 <p>Review spend by GL code and property.</p>
                 <div class="workflow-meta">{{ stats.ready_to_submit }} item{{ stats.ready_to_submit|pluralize }} ready</div>
             </a>
-            <a class="card workflow-card" href="{% url 'invoices:yardi_submit' %}">
+            <a class="workflow-card" href="{% url 'invoices:yardi_submit' %}">
                 <span class="workflow-number">5</span>
-                <h2 style="margin-bottom:0.3rem;">Submit to Yardi</h2>
-                <p>Generate upload JSON and audit CSV. Submitted invoices are removed from the batch.</p>
-                <div class="workflow-meta">
-                    {% if stats.pending_review_count == 0 and stats.invoice_count > 0 %}
-                    <span style="color: var(--green); font-weight: 600;">Ready</span>
-                    {% elif stats.pending_review_count %}
-                    {{ stats.pending_review_count }} item{{ stats.pending_review_count|pluralize }} still pending
-                    {% else %}
-                    No invoices in batch
-                    {% endif %}
-                </div>
+                <h2>Submit to Yardi</h2>
+                <p>Generate upload file and audit CSV.</p>
+                <div class="workflow-meta">{% if stats.pending_review_count == 0 and stats.invoice_count > 0 %}<span style="color:var(--green);font-weight:600;">Ready</span>{% elif stats.pending_review_count %}{{ stats.pending_review_count }} still pending{% else %}No invoices in batch{% endif %}</div>
             </a>
-        </div>
+        </div></div>
     </section>
 
 </main>

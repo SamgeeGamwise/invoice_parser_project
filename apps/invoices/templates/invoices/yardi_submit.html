@@ -52,8 +52,12 @@
 
         <div class="summary">
             <div class="tile tile-green">
-                <div class="tile-label">Ready to Submit</div>
+                <div class="tile-label">Invoices</div>
                 <div class="tile-value">{{ invoice_count }}</div>
+            </div>
+            <div class="tile tile-blue">
+                <div class="tile-label">Line Entries</div>
+                <div class="tile-value">{{ entry_count }}</div>
             </div>
             <div class="tile tile-blue">
                 <div class="tile-label">Grand Total</div>
@@ -73,33 +77,34 @@
         {% endif %}
     </section>
 
-    {% if invoice_count %}
+    {% if grouped_entries %}
     <section class="card">
-        <h2>Invoices Included in This Submission</h2>
+        <h2>Accounting Entries</h2>
+        <p>Grouped by property and GL code. Each row represents the combined spend for that account.</p>
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr>
-                    <th>Invoice #</th>
-                    <th>Date</th>
-                    <th>Property</th>
-                    <th>Purchaser</th>
-                    <th class="num">Grand Total</th>
-                    <th class="num">Line Items</th>
+                    <th>Property (Yardi)</th>
+                    <th>GL Code</th>
+                    <th>GL Description</th>
+                    <th class="num">Entries</th>
+                    <th class="num">Amount</th>
                 </tr>
             </thead>
             <tbody>
-                {% for inv in invoices %}
+                {% for row in grouped_entries %}
                 <tr>
-                    <td><a href="{% url 'invoices:invoice_detail' inv.id %}">{{ inv.invoice_number }}</a></td>
-                    <td>{{ inv.invoice_date|default:"&mdash;" }}</td>
-                    <td>{{ inv.property_reference.code }}</td>
-                    <td>{{ inv.purchaser|default:"&mdash;" }}</td>
-                    <td class="num">${{ inv.grand_total|default:0|floatformat:2|intcomma }}</td>
-                    <td class="num">{{ inv.line_items.count }}</td>
+                    <td class="code">{{ row.property_yardi_code }}</td>
+                    <td class="code">{{ row.gl_code }}</td>
+                    <td>{{ row.gl_description }}</td>
+                    <td class="num">{{ row.entry_count }}</td>
+                    <td class="num">${{ row.amount|floatformat:2|intcomma }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        </div>
 
         <div class="actions">
             <form method="post">
@@ -113,7 +118,7 @@
     {% else %}
     <section class="card">
         <div class="empty">
-            <p>No invoices are ready to submit yet.</p>
+            <p>No entries are ready to submit yet.</p>
             <p>All invoices need a validated property code and every line item must have an approved GL code.</p>
             <br>
             <a href="{% url 'invoices:review_queue' %}" class="btn btn-outline">Go to Approval Queue</a>

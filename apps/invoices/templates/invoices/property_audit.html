@@ -9,17 +9,6 @@
     <style>
         main { max-width: 1120px; }
 
-        .hero           { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
-        .stats          { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
-        .section-actions { display: flex; gap: 0.65rem; flex-wrap: wrap; }
-
-        /* Workflow steps */
-        .workflow      { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.8rem; margin-top: 1.15rem; }
-        .workflow-step { border: 1px solid var(--border); border-radius: 12px; background: #f8fafc; padding: 1rem; }
-        .workflow-step strong { display: block; font-size: 0.84rem; margin-bottom: 0.25rem; color: var(--text); }
-        .workflow-step span   { display: block; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
-        .workflow-step.active { background: #eff6ff; border-color: #bfdbfe; }
-
         /* Audit-specific badge variants */
         .badge-ok   { background: #dcfce7; color: #15803d; }
         .badge-miss { background: #fff1f2; color: #be123c; }
@@ -49,48 +38,6 @@
         {% endfor %}
     </div>
     {% endif %}
-
-    {% comment %} <section class="card">
-        <div class="hero">
-            <div>
-                <h1>Code Audit</h1>
-                <p>Audit invoice codes after upload and before approval. This step closes the gap between what the invoices contain and what your reference tables currently know.</p>
-            </div>
-            <div class="section-actions">
-                <a class="btn btn-outline" href="{% url 'invoices:gl_codes' %}">Manage GL Codes</a>
-                <a class="btn btn-outline" href="{% url 'invoices:properties' %}">Manage Properties</a>
-                <a class="btn btn-primary" href="{% url 'invoices:review_queue' %}">Go to Approval Queue</a>
-            </div>
-        </div>
-        <div class="stats">
-            <span class="pill pill-blue">{{ total_invoices }} invoice{{ total_invoices|pluralize }}</span>
-            <span class="pill pill-amber">{{ gl_audit_missing_count }} GL code{{ gl_audit_missing_count|pluralize }} to review</span>
-            <span class="pill pill-red">{{ property_audit_missing_count }} property code{{ property_audit_missing_count|pluralize }} to review</span>
-            <span class="pill pill-green">{{ matched_property_invoices }} invoice{{ matched_property_invoices|pluralize }} with validated properties</span>
-        </div>
-        <div class="workflow">
-            <div class="workflow-step">
-                <strong>1. Load Reference Data</strong>
-                <span>Upload or maintain GL Codes and Properties.</span>
-            </div>
-            <div class="workflow-step">
-                <strong>2. Upload Invoices</strong>
-                <span>Parse PDFs and capture invoice-level GL and property codes.</span>
-            </div>
-            <div class="workflow-step active">
-                <strong>3. Audit Codes</strong>
-                <span>Resolve anything missing before reviewers start approving line items.</span>
-            </div>
-            <div class="workflow-step">
-                <strong>4. Approval Queue</strong>
-                <span>Approve line items once both code sets are available.</span>
-            </div>
-            <div class="workflow-step">
-                <strong>5. Reports</strong>
-                <span>Review totals and prepare for a future submit step.</span>
-            </div>
-        </div>
-    </section> {% endcomment %}
 
     <section class="card" id="gl-audit">
         <div class="section-head">

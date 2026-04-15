@@ -10,6 +10,8 @@
         main { max-width: 960px; }
         /* Properties pill is green, not blue */
         .pill { background: #f0fdf4; color: var(--green); }
+        .table-scroll { max-height: 60vh; overflow-y: auto; }
+        .table-scroll thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
     </style>
 </head>
 <body>
@@ -59,6 +61,7 @@
 
     <section class="card">
         {% if property_references %}
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr>
@@ -95,6 +98,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         {% else %}
         <div class="empty">No properties yet. Add one above or import a CSV file.</div>
         {% endif %}

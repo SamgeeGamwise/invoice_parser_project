@@ -9,6 +9,8 @@
     <style>
         main { max-width: 960px; }
         dialog { max-width: 440px; }
+        .table-scroll { max-height: 60vh; overflow-y: auto; }
+        .table-scroll thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
     </style>
 </head>
 <body>
@@ -58,6 +60,7 @@
 
     <section class="card">
         {% if gl_accounts %}
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr>
@@ -93,6 +96,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         {% else %}
         <div class="empty">No GL codes yet. Add one above or import a CSV file.</div>
         {% endif %}

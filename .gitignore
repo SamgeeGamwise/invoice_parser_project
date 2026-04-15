@@ -8,4 +8,4 @@ db.sqlite3
 media/
 staticfiles/
 .claude/
-data/output/*
+data/output

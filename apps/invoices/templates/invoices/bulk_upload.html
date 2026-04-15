@@ -87,11 +87,6 @@
     <div class="card">
         <h1>Upload Invoices</h1>
         <p>Select one or more Amazon invoice PDFs. Files are parsed, GL codes are suggested, and results are saved to the database.</p>
-
-        <div class="info-box">
-            After upload, go to <strong>Code Audit</strong> to resolve any unmatched GL or property codes, then proceed to the <strong>Approval Queue</strong>.
-        </div>
-
         {% if form.errors %}
         <ul class="error-list">
             {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
