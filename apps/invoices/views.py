@@ -549,7 +549,6 @@ def review_queue_view(request: HttpRequest) -> HttpResponse:
 
     pending_qs = (
         InvoiceLineItem.objects
-        .filter(item_type=InvoiceLineItem.ItemType.PRODUCT)
         .filter(Q(approved_gl__isnull=True) | Q(invoice__property_reference__isnull=True))
         .select_related("invoice", "invoice__property_reference", "suggested_gl", "approved_gl")
         .order_by(order_expr, "id")
@@ -644,7 +643,6 @@ def approve_item_view(request: HttpRequest, item_id: int) -> JsonResponse:
     item = get_object_or_404(
         InvoiceLineItem.objects.select_related("invoice", "invoice__property_reference", "suggested_gl"),
         pk=item_id,
-        item_type=InvoiceLineItem.ItemType.PRODUCT,
     )
     gl_code = request.POST.get("gl_code", "").strip()
     gl = GLAccount.objects.filter(code=gl_code).first() if gl_code else item.suggested_gl
@@ -658,8 +656,6 @@ def approve_item_view(request: HttpRequest, item_id: int) -> JsonResponse:
     item.save(update_fields=["approved_gl", "reviewed_at", "updated_at"])
 
     pending = InvoiceLineItem.objects.filter(
-        item_type=InvoiceLineItem.ItemType.PRODUCT,
-    ).filter(
         Q(approved_gl__isnull=True) | Q(invoice__property_reference__isnull=True)
     ).count()
 
