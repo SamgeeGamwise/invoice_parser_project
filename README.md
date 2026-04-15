@@ -62,7 +62,7 @@ This project easily had the potential to fully automate the mapping of invoice l
 
 ## Known Limitations
 
-This is not a production ready project. There is not much support for stepping back in the work flow, particularly for the end user. The model can claim some bad confidence levels (curious to spend more time training model to see how it would handle). Moving some of the built-in scripts for the end user to access might be nice. Duplicate invoices can be an issue. Adding/removing GL codes can be an issue.
+This is not a production ready project. There is not much support for stepping back in the work flow, particularly for the end user. The model can claim some bad confidence levels (curious to spend more time training model to see how it would handle). Moving some of the built-in scripts for the end user to access might be nice. Duplicate invoices can be an issue. Adding/removing GL codes can be an issue. ML grading is only completed on upload -- not a huge issue other than for initial testing and early usage.
 
 ---
 
