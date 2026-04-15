@@ -160,7 +160,9 @@ class InvoiceProcessingService:
                 item.suggested_confidence = suggestions[0].confidence
                 item.suggestion_reason = " ".join(suggestions[0].reasons)
 
-            # Discounts, credits, and shipping always follow the invoice-level GL.
-            # Auto-approve them so they never enter the manual review queue.
-            if item.item_type in ("discount", "shipping") and item.suggested_gl_code:
-                item.approved_gl_code = item.suggested_gl_code
+            # Discounts, shipping, and fees always use the invoice-level GL when provided.
+            # If no invoice GL is present, leave unapproved for manual assignment.
+            if item.item_type in ("discount", "shipping", "fee"):
+                if parsed.invoice_gl_code:
+                    item.approved_gl_code = parsed.invoice_gl_code
+                    item.approved_gl_description = parsed.invoice_gl_description

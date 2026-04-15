@@ -74,8 +74,6 @@ class Invoice(models.Model):
     @property
     def pending_review_count(self) -> int:
         return self.line_items.filter(
-            item_type=InvoiceLineItem.ItemType.PRODUCT,
-        ).filter(
             Q(approved_gl__isnull=True) | Q(invoice__property_reference__isnull=True)
         ).count()
 
@@ -148,10 +146,7 @@ class InvoiceLineItem(models.Model):
 
     @property
     def needs_review(self) -> bool:
-        return (
-            self.item_type == self.ItemType.PRODUCT
-            and (self.approved_gl_id is None or not self.has_valid_property)
-        )
+        return self.approved_gl_id is None or not self.has_valid_property
 
     def mark_reviewed(self) -> None:
         self.reviewed_at = timezone.now()

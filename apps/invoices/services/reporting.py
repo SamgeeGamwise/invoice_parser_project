@@ -10,12 +10,9 @@ class ReportingService:
         invoices = Invoice.objects.count()
         line_items = InvoiceLineItem.objects.count()
         pending_approval = InvoiceLineItem.objects.filter(
-            item_type=InvoiceLineItem.ItemType.PRODUCT,
-        ).filter(
             Q(approved_gl__isnull=True) | Q(invoice__property_reference__isnull=True)
         ).count()
         approved_items = InvoiceLineItem.objects.filter(
-            item_type=InvoiceLineItem.ItemType.PRODUCT,
             approved_gl__isnull=False,
             invoice__property_reference__isnull=False,
         ).count()

@@ -54,11 +54,10 @@ class YardiSubmitService:
         Criteria:
           - property_reference is set
           - at least one PRODUCT line item exists
-          - every PRODUCT line item has an approved GL code
+          - every line item has an approved GL code
         """
         has_unreviewed = InvoiceLineItem.objects.filter(
             invoice=OuterRef("pk"),
-            item_type=InvoiceLineItem.ItemType.PRODUCT,
             approved_gl__isnull=True,
         )
         has_product_items = InvoiceLineItem.objects.filter(
@@ -71,7 +70,7 @@ class YardiSubmitService:
             .filter(Exists(has_product_items))
             .exclude(Exists(has_unreviewed))
             .select_related("property_reference")
-            .prefetch_related("line_items__approved_gl")
+            .prefetch_related("line_items__approved_gl", "line_items__suggested_gl")
             .order_by("invoice_date", "invoice_number")
         )
 
@@ -173,21 +172,18 @@ class YardiSubmitService:
         for inv in invoices:
             property_yardi_code = inv.property_reference.website_id if inv.property_reference else ""
             property_code = inv.property_reference.code if inv.property_reference else ""
-            items = (
-                inv.line_items
-                .filter(item_type=InvoiceLineItem.ItemType.PRODUCT)
-                .order_by("line_number")
-            )
+            items = inv.line_items.order_by("line_number")
             for item in items:
-                if not item.approved_gl:
+                gl = item.approved_gl or item.suggested_gl
+                if not gl:
                     continue
                 line_total = item.line_total or Decimal("0")
                 tax = item.tax_amount or Decimal("0")
                 entries.append({
                     "property_yardi_code": property_yardi_code,
                     "property_code": property_code,
-                    "gl_code": item.approved_gl.code,
-                    "gl_description": item.approved_gl.description,
+                    "gl_code": gl.code,
+                    "gl_description": gl.description,
                     "amount": line_total + tax,
                     "date": inv.invoice_date,
                     "reference": inv.invoice_number,

@@ -46,6 +46,12 @@ class AmazonInvoiceParserService:
         r"(?P<tax_rate>[\d.]+%)$",
         re.IGNORECASE,
     )
+    FEE_LINE_PATTERN = re.compile(
+        r"^(?P<line_number>\d+)\s+"
+        r"(?P<description>.+\bFee\b.*?)\s+"
+        r"\$(?P<line_total>[\d,]+\.\d{2})$",
+        re.IGNORECASE,
+    )
     ASIN_INLINE_PATTERN = re.compile(r"ASIN:\s*(?P<asin>[A-Z0-9]{10})?", re.IGNORECASE)
     ASIN_STANDALONE_PATTERN = re.compile(r"^[A-Z0-9]{10}$")
     SOLD_BY_PATTERN = re.compile(r"Sold by:\s*(?P<vendor>.+)", re.IGNORECASE)
@@ -185,6 +191,22 @@ class AmazonInvoiceParserService:
                 line_items.append(active_line_item)
                 continue
 
+            fee_match = self.FEE_LINE_PATTERN.match(line)
+            if fee_match:
+                line_total = self._to_decimal(fee_match.group("line_total"))
+                active_line_item = InvoiceLineItem(
+                    line_number=int(fee_match.group("line_number")),
+                    item_type="fee",
+                    description=fee_match.group("description").strip(),
+                    quantity=None,
+                    unit_price=None,
+                    line_total=line_total,
+                    tax_rate=Decimal("0"),
+                    tax_amount=Decimal("0.00"),
+                )
+                line_items.append(active_line_item)
+                continue
+
             if not active_line_item:
                 continue
 
@@ -249,7 +271,7 @@ class AmazonInvoiceParserService:
             return False
         if self.ASIN_STANDALONE_PATTERN.match(line) and not active_line_item.description.endswith(line):
             return False
-        if self.PRODUCT_LINE_PATTERN.match(line) or self.DISCOUNT_LINE_PATTERN.match(line) or self.SHIPPING_LINE_PATTERN.match(line):
+        if self.PRODUCT_LINE_PATTERN.match(line) or self.DISCOUNT_LINE_PATTERN.match(line) or self.SHIPPING_LINE_PATTERN.match(line) or self.FEE_LINE_PATTERN.match(line):
             return False
         if self._is_section_break(line):
             return False
