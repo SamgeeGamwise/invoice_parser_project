@@ -14,7 +14,7 @@ _REVIEW_RANGE_WEIGHT = _cfg["REVIEW_RANGE_WEIGHT"]
 
 class LineItemGLClassifierService:
     def suggest(self, line_item: ParsedLineItem, invoice_gl_code: str) -> list[GLSuggestion]:
-        if line_item.item_type in ("discount", "shipping"):
+        if line_item.item_type in ("discount", "shipping", "fee"):
             return self._non_product_suggestions(line_item, invoice_gl_code, "Non-product line defaulted to invoice-level GL.")
 
         # All GL accounts are candidates — in_review_range no longer gates eligibility.

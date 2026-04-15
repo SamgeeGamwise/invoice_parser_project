@@ -161,8 +161,24 @@ class InvoiceProcessingService:
                 item.suggestion_reason = " ".join(suggestions[0].reasons)
 
             # Discounts, shipping, and fees always use the invoice-level GL when provided.
-            # If no invoice GL is present, leave unapproved for manual assignment.
+            # If no invoice GL is present, they inherit from the most expensive product
+            # item after all items have been enriched (see below).
             if item.item_type in ("discount", "shipping", "fee"):
                 if parsed.invoice_gl_code:
                     item.approved_gl_code = parsed.invoice_gl_code
                     item.approved_gl_description = parsed.invoice_gl_description
+
+        # Second pass: non-product items on invoices without a GL code inherit the
+        # suggested GL of the most expensive product line item on the same invoice.
+        if not parsed.invoice_gl_code:
+            most_expensive = max(
+                (i for i in parsed.line_items if i.item_type == "product"),
+                key=lambda i: i.line_total or 0,
+                default=None,
+            )
+            if most_expensive and most_expensive.suggested_gl_code:
+                for item in parsed.line_items:
+                    if item.item_type in ("discount", "shipping", "fee"):
+                        item.suggested_gl_code = most_expensive.suggested_gl_code
+                        item.suggested_gl_description = most_expensive.suggested_gl_description
+                        item.suggested_confidence = most_expensive.suggested_confidence
