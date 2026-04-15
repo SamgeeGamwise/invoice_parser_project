@@ -1,10 +1,17 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
 db.sqlite3
+*.log
+.env
+.env.*
 .DS_Store
+Thumbs.db
 .pytest_cache/
 .mypy_cache/
+.coverage
+htmlcov/
 media/
 staticfiles/
 .claude/
