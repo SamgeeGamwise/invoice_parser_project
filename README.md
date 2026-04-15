@@ -25,6 +25,9 @@ make run
 
 ```
 
+Head to http://127.0.0.1:8000/gl-codes/ and http://127.0.0.1:8000/properties/ to upload the code .csv files (located in this repo within data/reference/)
+
+
 ## Architecture and Design Decisions
 
 ### Why Python/Django
