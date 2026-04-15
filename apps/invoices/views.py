@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import mimetypes
 import queue
 import threading
 from pathlib import Path
@@ -9,12 +10,12 @@ from django.contrib import messages
 from django.conf import settings
 from django.core.paginator import Paginator
 from django.db.models import Count, F, Q
-from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .forms import BulkInvoiceUploadForm, GLAccountForm, InvoiceUploadForm, PropertyReferenceForm
+from .forms import BulkInvoiceUploadForm, GLAccountForm, PropertyReferenceForm
 from .models import GLAccount, Invoice, InvoiceLineItem, PropertyReference
 from .services.data_catalog import ProjectDataCatalogService
 from .services.reference_data import ReferenceDataSyncService
@@ -416,8 +417,65 @@ def reports_view(request: HttpRequest) -> HttpResponse:
     })
 
 
-def results_view(request: HttpRequest) -> HttpResponse:
-    return redirect("invoices:dashboard")
+def _csv_response(filename: str, headers: list[str], rows: list[dict], keys: list[str]) -> HttpResponse:
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    writer = csv.writer(response)
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow([row[k] for k in keys])
+    return response
+
+
+def export_line_items_csv(request: HttpRequest) -> HttpResponse:
+    """CSV: every line item with its effective GL classification."""
+    rows = ReportingService().line_item_detail()
+    return _csv_response(
+        "gl_line_items.csv",
+        ["Invoice", "Date", "Property", "Line #", "Type", "Description", "Qty",
+         "Subtotal", "Tax Rate", "Tax", "Total", "GL Code", "GL Description", "GL Source"],
+        rows,
+        ["invoice_number", "invoice_date", "property_code", "line_number", "item_type",
+         "description", "quantity", "subtotal", "tax_rate", "tax_amount", "total",
+         "gl_code", "gl_description", "gl_source"],
+    )
+
+
+def export_gl_spend_csv(request: HttpRequest) -> HttpResponse:
+    """CSV: total spend grouped by GL code."""
+    rows = ReportingService().gl_spend_summary()
+    return _csv_response(
+        "gl_spend_summary.csv",
+        ["GL Code", "GL Description", "Line Items", "Total"],
+        rows,
+        ["gl_code", "gl_description", "line_item_count", "total"],
+    )
+
+
+def export_items_by_gl_csv(request: HttpRequest) -> HttpResponse:
+    """CSV: all line items sorted by GL code."""
+    rows = ReportingService().items_by_gl_detail()
+    return _csv_response(
+        "items_by_gl.csv",
+        ["GL Code", "GL Description", "Invoice", "Date", "Property", "Line #",
+         "Description", "Qty", "Subtotal", "Tax", "Total"],
+        rows,
+        ["gl_code", "gl_description", "invoice_number", "invoice_date", "property_code",
+         "line_number", "description", "quantity", "subtotal", "tax_amount", "total"],
+    )
+
+
+def export_items_by_property_csv(request: HttpRequest) -> HttpResponse:
+    """CSV: all line items sorted by property code."""
+    rows = ReportingService().items_by_property_detail()
+    return _csv_response(
+        "items_by_property.csv",
+        ["Property", "Invoice", "Date", "Line #", "Description",
+         "GL Code", "GL Description", "Qty", "Subtotal", "Tax", "Total"],
+        rows,
+        ["property_code", "invoice_number", "invoice_date", "line_number", "description",
+         "gl_code", "gl_description", "quantity", "subtotal", "tax_amount", "total"],
+    )
 
 
 _QUEUE_PAGE_SIZE = 50
@@ -914,7 +972,6 @@ def yardi_download_view(request: HttpRequest, filename: str) -> HttpResponse:
 
     Only files in OUTPUT_DIR are served; path traversal is rejected.
     """
-    import mimetypes
     output_dir = settings.OUTPUT_DIR
     target = (output_dir / filename).resolve()
 
@@ -922,11 +979,9 @@ def yardi_download_view(request: HttpRequest, filename: str) -> HttpResponse:
     try:
         target.relative_to(output_dir.resolve())
     except ValueError:
-        from django.http import Http404
         raise Http404
 
     if not target.exists():
-        from django.http import Http404
         raise Http404
 
     content_type, _ = mimetypes.guess_type(str(target))
@@ -946,10 +1001,7 @@ def clear_data_view(request: HttpRequest) -> HttpResponse:
     GL accounts, property references, and the ML model are not affected.
     """
     if not settings.DEBUG:
-        from django.http import Http404
         raise Http404
-
-    from .models import InvoiceLineItem
 
     if request.method == "POST":
         invoice_count = Invoice.objects.count()

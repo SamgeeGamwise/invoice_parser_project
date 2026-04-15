@@ -63,6 +63,8 @@ class AmazonInvoiceParserServiceTests(TestCase):
         self.assertEqual(parsed_invoice.grand_total, Decimal("128.69"))
         self.assertEqual(len(parsed_invoice.line_items), 1)
         self.assertIn("Tetherball", parsed_invoice.line_items[0].description)
+        self.assertEqual(parsed_invoice.line_items[0].tax_rate, Decimal("7.250"))
+        self.assertEqual(parsed_invoice.line_items[0].tax_amount, Decimal("8.70"))
         self.assertEqual(parsed_invoice.line_items[0].asin, "B08D39Z3CM")
         self.assertEqual(parsed_invoice.line_items[0].vendor, "Taiga Marketing, Inc")
         self.assertEqual(parsed_invoice.line_items[0].order_number, "114-8888272-4762604")
@@ -740,6 +742,7 @@ class YardiSubmitServiceTests(TestCase):
         entries = [
             {
                 "property_yardi_code": "1234",
+                "property_code": "SSOH",
                 "gl_code": "6734",
                 "gl_description": "POOL / REC SUPPLIES",
                 "amount": Decimal("119.99"),

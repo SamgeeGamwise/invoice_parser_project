@@ -32,6 +32,8 @@ class InvoiceLineItem:
     quantity: int | None = None
     unit_price: Decimal | None = None
     line_total: Decimal | None = None
+    tax_rate: Decimal | None = None
+    tax_amount: Decimal | None = None
     asin: str = ""
     vendor: str = ""
     order_number: str = ""

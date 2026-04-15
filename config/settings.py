@@ -6,9 +6,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ── Folder locations ──────────────────────────────────────────────────────────
 
 DATA_DIR              = BASE_DIR / "data"
-SAMPLE_INVOICES_DIR   = DATA_DIR / "samples" / "invoices"
 REFERENCE_DATA_DIR    = DATA_DIR / "reference"
-ARCHIVES_DIR          = DATA_DIR / "archives"
 OUTPUT_DIR            = DATA_DIR / "output"
 PARSED_INVOICES_JSON  = OUTPUT_DIR / "parsed_invoices.json"
 

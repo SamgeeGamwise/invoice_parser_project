@@ -30,6 +30,8 @@
         .show-all-row { padding: 0.6rem 0; font-size: 0.85rem; }
         .count-pill   { font-size: 0.78rem; color: var(--muted); }
         .empty-state  { text-align: center; padding: 2rem 1rem; color: var(--muted); font-size: 0.9rem; }
+        .export-bar   { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+        .export-bar a { font-size: 0.8rem; }
     </style>
 </head>
 <body>
@@ -40,7 +42,10 @@
 
     <section class="card">
         <h1>Reports</h1>
-        <p>Spend by GL code and property, sorted by total. Approved codes are used where set; otherwise the system suggestion applies.</p>
+        <p>Spend by GL code and property, sorted by total. Approved GL codes are used where set; otherwise the system suggestion applies.</p>
+        {% if stats.pending_review_count %}
+        <p style="font-size:0.82rem;color:var(--amber);margin:0.5rem 0 0;">{{ stats.pending_review_count }} line item{{ stats.pending_review_count|pluralize }} still pending review. Reports and exports include suggested GL codes for unapproved items.</p>
+        {% endif %}
         <div class="stats">
             <div class="stat">
                 <div class="stat-label">Invoices</div>
@@ -63,6 +68,15 @@
                 <div class="stat-value">${{ stats.total_amount|floatformat:2|intcomma }}</div>
             </div>
         </div>
+        {% if stats.line_item_count %}
+        <div class="export-bar">
+            <span style="font-size:0.8rem;color:var(--muted);align-self:center;">Export CSV:</span>
+            <a class="btn btn-outline btn-sm" href="{% url 'invoices:export_line_items' %}">GL per Line Item</a>
+            <a class="btn btn-outline btn-sm" href="{% url 'invoices:export_gl_spend' %}">GL Spend Summary</a>
+            <a class="btn btn-outline btn-sm" href="{% url 'invoices:export_items_by_gl' %}">Items by GL</a>
+            <a class="btn btn-outline btn-sm" href="{% url 'invoices:export_items_by_property' %}">Items by Property</a>
+        </div>
+        {% endif %}
     </section>
 
     <section class="card">

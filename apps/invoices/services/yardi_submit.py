@@ -172,6 +172,7 @@ class YardiSubmitService:
         entries = []
         for inv in invoices:
             property_yardi_code = inv.property_reference.website_id if inv.property_reference else ""
+            property_code = inv.property_reference.code if inv.property_reference else ""
             items = (
                 inv.line_items
                 .filter(item_type=InvoiceLineItem.ItemType.PRODUCT)
@@ -180,11 +181,14 @@ class YardiSubmitService:
             for item in items:
                 if not item.approved_gl:
                     continue
+                line_total = item.line_total or Decimal("0")
+                tax = item.tax_amount or Decimal("0")
                 entries.append({
                     "property_yardi_code": property_yardi_code,
+                    "property_code": property_code,
                     "gl_code": item.approved_gl.code,
                     "gl_description": item.approved_gl.description,
-                    "amount": item.line_total or Decimal("0"),
+                    "amount": line_total + tax,
                     "date": inv.invoice_date,
                     "reference": inv.invoice_number,
                 })
@@ -252,9 +256,10 @@ class YardiSubmitService:
             columns = [
                 ("Date", 36),
                 ("Property", 100),
-                ("GL", 168),
-                ("GL Description", 218),
-                ("Amount", 500),
+                ("Yardi ID", 160),
+                ("GL", 210),
+                ("GL Description", 250),
+                ("Amount", 510),
                 ("Invoice Ref", 590),
             ]
             for label, x in columns:
@@ -263,12 +268,13 @@ class YardiSubmitService:
 
             y = 460
             for entry in chunk:
-                description = self._truncate(entry["gl_description"], 44)
+                description = self._truncate(entry["gl_description"], 40)
                 self._pdf_text(commands, 36, y, entry["date"].isoformat() if entry["date"] else "", size=8)
-                self._pdf_text(commands, 100, y, entry["property_yardi_code"], size=8)
-                self._pdf_text(commands, 168, y, entry["gl_code"], size=8)
-                self._pdf_text(commands, 218, y, description, size=8)
-                self._pdf_text(commands, 500, y, f"${entry['amount']:.2f}", size=8)
+                self._pdf_text(commands, 100, y, entry["property_code"], size=8)
+                self._pdf_text(commands, 160, y, entry["property_yardi_code"], size=8)
+                self._pdf_text(commands, 210, y, entry["gl_code"], size=8)
+                self._pdf_text(commands, 250, y, description, size=8)
+                self._pdf_text(commands, 510, y, f"${entry['amount']:.2f}", size=8)
                 self._pdf_text(commands, 590, y, entry["reference"], size=8)
                 self._pdf_line(commands, 36, y - 8, 756, y - 8)
                 y -= 16

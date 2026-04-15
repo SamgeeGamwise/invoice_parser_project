@@ -1,4 +1,3 @@
-from collections import defaultdict
 from decimal import Decimal
 
 from django.db.models import Q, Sum
@@ -79,3 +78,66 @@ class ReportingService:
                 row["sample_items"].append(item.description)
 
         return sorted(grouped.values(), key=lambda row: row["total_amount"], reverse=True)
+
+    # ── CSV export helpers ───────────────────────────────────────────────────
+
+    def _base_queryset(self):
+        return (
+            InvoiceLineItem.objects
+            .select_related("invoice", "invoice__property_reference", "approved_gl", "suggested_gl")
+            .order_by("invoice__invoice_number", "line_number")
+        )
+
+    def _item_row(self, item: InvoiceLineItem) -> dict:
+        gl = item.effective_gl
+        line_total = item.line_total or Decimal("0.00")
+        tax = item.tax_amount or Decimal("0.00")
+        return {
+            "invoice_number": item.invoice.invoice_number,
+            "invoice_date": item.invoice.invoice_date or "",
+            "property_code": item.invoice.property_code_normalized or "",
+            "line_number": item.line_number,
+            "item_type": item.item_type,
+            "description": item.description,
+            "quantity": item.quantity or "",
+            "subtotal": line_total,
+            "tax_rate": item.tax_rate or Decimal("0"),
+            "tax_amount": tax,
+            "total": line_total + tax,
+            "gl_code": gl.code if gl else "",
+            "gl_description": gl.description if gl else "",
+            "gl_source": "approved" if item.approved_gl_id else ("suggested" if item.suggested_gl_id else ""),
+        }
+
+    def line_item_detail(self) -> list[dict]:
+        """Every line item with its effective GL classification."""
+        return [self._item_row(item) for item in self._base_queryset()]
+
+    def gl_spend_summary(self) -> list[dict]:
+        """Total spend grouped by GL code, tax-inclusive."""
+        grouped: dict[str, dict] = {}
+        for item in self._base_queryset():
+            gl = item.effective_gl
+            if not gl:
+                continue
+            line_total = item.line_total or Decimal("0.00")
+            tax = item.tax_amount or Decimal("0.00")
+            row = grouped.setdefault(gl.code, {
+                "gl_code": gl.code,
+                "gl_description": gl.description,
+                "line_item_count": 0,
+                "total": Decimal("0.00"),
+            })
+            row["line_item_count"] += 1
+            row["total"] += line_total + tax
+        return sorted(grouped.values(), key=lambda r: r["total"], reverse=True)
+
+    def items_by_gl_detail(self) -> list[dict]:
+        """All line items sorted by GL code, then invoice."""
+        rows = [self._item_row(item) for item in self._base_queryset()]
+        return sorted(rows, key=lambda r: (r["gl_code"] or "zzz", r["invoice_number"], r["line_number"]))
+
+    def items_by_property_detail(self) -> list[dict]:
+        """All line items sorted by property code, then invoice."""
+        rows = [self._item_row(item) for item in self._base_queryset()]
+        return sorted(rows, key=lambda r: (r["property_code"] or "zzz", r["invoice_number"], r["line_number"]))

@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 
 from ..schemas import InvoiceLineItem, ParsedInvoice
 
@@ -67,8 +67,30 @@ class AmazonInvoiceParserService:
             grand_total=self._search_money(self.GRAND_TOTAL_PATTERN, raw_text),
             line_items=self._extract_line_items(raw_text),
         )
+        self._reconcile_tax(parsed_invoice)
         self._validate_invoice(parsed_invoice)
         return parsed_invoice
+
+    def _reconcile_tax(self, parsed_invoice: ParsedInvoice) -> None:
+        """Adjust per-item tax so the sum matches the invoice-level tax total.
+
+        Per-item tax is computed from line_total * tax_rate, which can drift by
+        a penny or two due to rounding.  The difference is added to the first
+        taxable line item so the per-item amounts reconcile exactly to the
+        invoice total.
+        """
+        if parsed_invoice.tax_total is None:
+            return
+        taxable_items = [
+            item for item in parsed_invoice.line_items
+            if item.tax_amount and item.tax_amount != Decimal("0.00")
+        ]
+        if not taxable_items:
+            return
+        computed_tax = sum(item.tax_amount for item in taxable_items)
+        difference = parsed_invoice.tax_total - computed_tax
+        if difference != Decimal("0"):
+            taxable_items[0].tax_amount += difference
 
     def _validate_invoice(self, parsed_invoice: ParsedInvoice) -> None:
         missing_fields = []
@@ -114,39 +136,51 @@ class AmazonInvoiceParserService:
 
             product_match = self.PRODUCT_LINE_PATTERN.match(line)
             if product_match:
+                line_total = self._to_decimal(product_match.group("line_total"))
+                tax_rate = self._parse_tax_rate(product_match.group("tax_rate"))
                 active_line_item = InvoiceLineItem(
                     line_number=int(product_match.group("line_number")),
                     item_type="product",
                     description=product_match.group("description").strip(),
                     quantity=int(product_match.group("quantity")),
                     unit_price=self._to_decimal(product_match.group("unit_price")),
-                    line_total=self._to_decimal(product_match.group("line_total")),
+                    line_total=line_total,
+                    tax_rate=tax_rate,
+                    tax_amount=self._compute_tax(line_total, tax_rate),
                 )
                 line_items.append(active_line_item)
                 continue
 
             discount_match = self.DISCOUNT_LINE_PATTERN.match(line)
             if discount_match:
+                line_total = -self._to_decimal(discount_match.group("line_total"))
+                tax_rate = self._parse_tax_rate(discount_match.group("tax_rate"))
                 active_line_item = InvoiceLineItem(
                     line_number=int(discount_match.group("line_number")),
                     item_type="discount",
                     description=discount_match.group("description").strip(),
                     quantity=None,
                     unit_price=None,
-                    line_total=-self._to_decimal(discount_match.group("line_total")),
+                    line_total=line_total,
+                    tax_rate=tax_rate,
+                    tax_amount=self._compute_tax(line_total, tax_rate),
                 )
                 line_items.append(active_line_item)
                 continue
 
             shipping_match = self.SHIPPING_LINE_PATTERN.match(line)
             if shipping_match:
+                line_total = self._to_decimal(shipping_match.group("line_total"))
+                tax_rate = self._parse_tax_rate(shipping_match.group("tax_rate"))
                 active_line_item = InvoiceLineItem(
                     line_number=int(shipping_match.group("line_number")),
                     item_type="shipping",
                     description=shipping_match.group("description").strip(),
                     quantity=None,
                     unit_price=None,
-                    line_total=self._to_decimal(shipping_match.group("line_total")),
+                    line_total=line_total,
+                    tax_rate=tax_rate,
+                    tax_amount=self._compute_tax(line_total, tax_rate),
                 )
                 line_items.append(active_line_item)
                 continue
@@ -248,6 +282,19 @@ class AmazonInvoiceParserService:
     def _normalize_description(self, value: str) -> str:
         cleaned = re.sub(r"[^a-z0-9]+", " ", value.lower())
         return re.sub(r"\s+", " ", cleaned).strip()
+
+    def _parse_tax_rate(self, value: str) -> Decimal:
+        cleaned = value.replace("%", "").strip()
+        try:
+            return Decimal(cleaned)
+        except Exception:
+            return Decimal("0")
+
+    def _compute_tax(self, line_total: Decimal, tax_rate: Decimal) -> Decimal:
+        if not line_total or not tax_rate:
+            return Decimal("0.00")
+        raw = line_total * tax_rate / Decimal("100")
+        return raw.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
 
     def _to_decimal(self, value: str) -> Decimal:
         from decimal import InvalidOperation

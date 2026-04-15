@@ -98,6 +98,8 @@ class InvoiceLineItem(models.Model):
     quantity = models.IntegerField(null=True, blank=True)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     line_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    tax_rate = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     asin = models.CharField(max_length=20, blank=True)
     vendor = models.CharField(max_length=255, blank=True)
     order_number = models.CharField(max_length=40, blank=True)

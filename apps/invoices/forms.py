@@ -6,19 +6,6 @@ from .models import GLAccount, PropertyReference
 _MAX_PDF_SIZE = getattr(settings, "BULK_UPLOAD_MAX_FILE_SIZE_MB", 50) * 1024 * 1024
 
 
-class InvoiceUploadForm(forms.Form):
-    invoice_pdf = forms.FileField(
-        required=True,
-        help_text="Upload a single Amazon invoice PDF.",
-    )
-
-    def clean_invoice_pdf(self):
-        uploaded_file = self.cleaned_data["invoice_pdf"]
-        if not uploaded_file.name.lower().endswith(".pdf"):
-            raise forms.ValidationError("Please upload a PDF file.")
-        return uploaded_file
-
-
 class MultipleFileInput(forms.ClearableFileInput):
     allow_multiple_selected = True
 

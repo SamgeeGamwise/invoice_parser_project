@@ -81,6 +81,8 @@ class InvoiceRepositoryService:
                     quantity=parsed_line_item.quantity,
                     unit_price=parsed_line_item.unit_price,
                     line_total=parsed_line_item.line_total,
+                    tax_rate=parsed_line_item.tax_rate,
+                    tax_amount=parsed_line_item.tax_amount,
                     asin=parsed_line_item.asin,
                     vendor=parsed_line_item.vendor,
                     order_number=parsed_line_item.order_number,
