@@ -1,7 +1,15 @@
 VENV = .venv
-PYTHON = $(VENV)/bin/python
-MANAGE = $(PYTHON) manage.py
 EMBEDDING_MODEL = sentence-transformers/all-MiniLM-L6-v2
+
+ifeq ($(OS),Windows_NT)
+  PYTHON = $(VENV)/Scripts/python
+  PIP    = $(VENV)/Scripts/pip
+else
+  PYTHON = $(VENV)/bin/python
+  PIP    = $(VENV)/bin/pip
+endif
+
+MANAGE = $(PYTHON) manage.py
 
 # ── Run ──────────────────────────────────────────────────────────────────────
 
@@ -26,13 +34,13 @@ clear-history: ## Clear all GL approvals (resets KNN history) while keeping invo
 	$(PYTHON) -c "import django, os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); django.setup(); from apps.invoices.models import InvoiceLineItem; n = InvoiceLineItem.objects.filter(approved_gl__isnull=False).update(approved_gl=None, reviewed_at=None); print(f'Cleared {n} approval(s).')"
 
 cache-model:   ## Download/cache the sentence-transformer model used for GL suggestions
-	INVOICE_PARSER_ALLOW_MODEL_DOWNLOAD=1 $(PYTHON) -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('$(EMBEDDING_MODEL)'); print('Cached $(EMBEDDING_MODEL)')"
+	$(PYTHON) -c "import os; os.environ['INVOICE_PARSER_ALLOW_MODEL_DOWNLOAD']='1'; from sentence_transformers import SentenceTransformer; SentenceTransformer('$(EMBEDDING_MODEL)'); print('Cached $(EMBEDDING_MODEL)')"
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 
 install:       ## Create venv and install dependencies
-	python3 -m venv $(VENV)
-	$(VENV)/bin/pip install -r requirements.txt
+	python -m venv $(VENV)
+	$(PIP) install -r requirements.txt
 
 setup: install migrate ## First-time setup (import GL codes and properties via the UI)
 

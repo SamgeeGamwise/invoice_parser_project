@@ -29,11 +29,13 @@ Head to http://127.0.0.1:8000/gl-codes/ and http://127.0.0.1:8000/properties/ to
 
 ### Running on Windows
 
-- winget: `winget install ezwinports.make`
+Using [Scoop](https://scoop.sh/): 
 
-**OR**
+```
 
-- Chocolatey: `choco install make`
+scoop install make
+
+```
 
 Then follow the steps listed
 
