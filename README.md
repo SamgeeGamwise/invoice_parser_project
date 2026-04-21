@@ -27,6 +27,16 @@ make run
 
 Head to http://127.0.0.1:8000/gl-codes/ and http://127.0.0.1:8000/properties/ to upload the code .csv files (located in this repo within data/reference/)
 
+### Running on Windows
+
+- winget: `winget install ezwinports.make`
+
+**OR**
+
+- Chocolatey: `choco install make`
+
+Then follow the steps listed
+
 
 ## Architecture and Design Decisions
 
